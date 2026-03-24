@@ -1,0 +1,21 @@
+# Flutter / Dart build outputs
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+# generated files are committed so Railway build works without build_runner
+
+# Node / API
+api/node_modules/
+api/.vercel/
+
+# Env files (never commit secrets)
+.env
+.env.*
+*.env
+
+# Misc
+.DS_Store
+*.log
+.claude/

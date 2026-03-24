@@ -1,0 +1,86 @@
+name: silat
+description: silat ar rahim — family network registry
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.6.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # state
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # navigation
+  go_router: ^14.6.2
+
+  # local persistence
+  drift: ^2.22.1
+  drift_flutter: ^0.2.4
+  sqlite3_flutter_libs: ^0.5.0
+  path_provider: ^2.1.0
+
+  # ids
+  uuid: ^4.5.0
+
+  # networking
+  http: ^1.2.0
+  shared_preferences: ^2.3.0
+
+  # ar + camera
+  mobile_scanner: ^6.0.0
+  camera: ^0.11.0
+
+  # sensors (frame heading)
+  sensors_plus: ^6.1.0
+
+  # frame glasses
+  frame_sdk: ^0.0.7
+  flutter_blue_plus: ^1.31.0
+
+  # geo
+  geolocator: ^13.0.0
+  flutter_map: ^7.0.0
+  latlong2: ^0.9.1
+
+  # qr generation (member badges)
+  qr_flutter: ^4.1.0
+
+  # file import
+  file_picker: ^8.1.2
+
+  # ui utilities
+  intl: ^0.19.0
+  cached_network_image: ^3.3.0
+  url_launcher: ^6.2.0
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  drift_dev: ^2.22.1
+  build_runner: ^2.4.0
+  riverpod_generator: ^2.6.1
+  flutter_launcher_icons: ^0.14.3
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
+    - assets/images/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  web:
+    generate: true
+    image_path: assets/images/icon.png
+    background_color: "#0F1117"
+    theme_color: "#C1602A"
+  image_path: assets/images/icon.png
+  adaptive_icon_background: "#0F1117"
+  adaptive_icon_foreground: assets/images/icon.png

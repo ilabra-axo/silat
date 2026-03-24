@@ -1,0 +1,21 @@
+{
+  "name": "silat-api",
+  "version": "0.1.0",
+  "description": "silat ar rahim — backend API (Vercel + Neon)",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod",
+    "typecheck": "npx tsx --noEmit api/**/*.ts"
+  },
+  "dependencies": {
+    "@vercel/node": "^5.5.28",
+    "@vercel/postgres": "^0.5.1",
+    "nanoid": "^3.3.11"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "typescript": "^5.3.3",
+    "tsx": "latest",
+    "vercel": "^33.7.1"
+  }
+}
