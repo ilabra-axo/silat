@@ -1,10 +1,13 @@
-// Google OAuth — identical pattern to ABW (uffp-backend)
-// Redirect URI: https://silat-api.vercel.app/api/auth/oauth
+// Google OAuth — redirect flow (web-compatible)
+// Step 1: /api/auth/oauth?provider=google  → redirect to Google
+// Step 2: Google callback → exchange code → redirect to APP_URL?silat_token=...&silat_user=...
+// Flutter app reads the params on startup (main.dart) to complete sign-in.
 
 import { VercelRequest, VercelResponse } from "@vercel/node";
 import { cors, encodeToken } from "../../lib/auth";
 
 const REDIRECT_URI = "https://silat-api.vercel.app/api/auth/oauth";
+const APP_URL = "https://silat.ooo";
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export default async function handler(
@@ -18,7 +21,7 @@ export default async function handler(
   try {
     const { provider, code, state } = req.query;
 
-    // Step 1 — initiate redirect
+    // ── Step 1: initiate redirect to Google ───────────────────────────────
     if (!code) {
       if (provider !== "google") {
         return res.status(400).json({ error: "Only Google OAuth supported" });
@@ -41,7 +44,7 @@ export default async function handler(
       return res.end();
     }
 
-    // Step 2 — callback: exchange code for user info
+    // ── Step 2: callback from Google ──────────────────────────────────────
     if (state !== "google") {
       return res.status(400).json({ error: "Invalid state" });
     }
@@ -102,28 +105,23 @@ export default async function handler(
       exp: Date.now() + TOKEN_TTL_MS,
     });
 
-    // Post token to opener and close popup (same as ABW pattern)
-    const html = `<!DOCTYPE html><html><head><title>silat — signed in</title></head>
-<body style="background:#0F1117;color:#F5F2ED;font-family:system-ui;padding:2rem">
-  <p>Signing in…</p>
-  <script>
-    window.opener?.postMessage(
-      { type: 'silat-oauth', user: ${JSON.stringify(user)}, token: '${token}' },
-      '*'
-    );
-    setTimeout(() => window.close(), 800);
-  </script>
-</body></html>`;
+    // ── Redirect back to Flutter app with token in query params ───────────
+    // Flutter main.dart reads silat_token + silat_user on startup to sign in.
+    const userB64 = Buffer.from(JSON.stringify(user)).toString("base64url");
+    const callbackUrl =
+      `${APP_URL}?silat_token=${encodeURIComponent(token)}` +
+      `&silat_user=${encodeURIComponent(userB64)}`;
 
-    res.setHeader("Content-Type", "text/html");
-    return res.status(200).send(html);
+    res.writeHead(307, { Location: callbackUrl });
+    return res.end();
+
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[oauth]", msg);
-    const html = `<!DOCTYPE html><html><body style="background:#0F1117;color:#B85450;font-family:system-ui;padding:2rem">
-<p>Sign-in failed: ${msg}</p><button onclick="window.close()">close</button>
-</body></html>`;
-    res.setHeader("Content-Type", "text/html");
-    return res.status(500).send(html);
+    // Redirect to app with error param so user sees a message
+    res.writeHead(307, {
+      Location: `${APP_URL}?silat_error=${encodeURIComponent(msg)}`,
+    });
+    return res.end();
   }
 }
