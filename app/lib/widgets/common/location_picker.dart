@@ -2,6 +2,7 @@
 // Ported from rabble's LocationPicker, adapted to silat theme.
 // Returns lat/lng/label; H3 cell computed server-side on sync.
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -38,6 +39,8 @@ class LocationPicker extends StatefulWidget {
 }
 
 class _LocationPickerState extends State<LocationPicker> {
+  static const _apiBase = 'https://silat-api.vercel.app';
+
   final _search = TextEditingController();
   final _map = MapController();
   List<_Place> _results = [];
@@ -45,6 +48,7 @@ class _LocationPickerState extends State<LocationPicker> {
   bool _gps = false;
   LatLng? _pin;
   String? _label;
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -58,30 +62,27 @@ class _LocationPickerState extends State<LocationPicker> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _search.dispose();
     _map.dispose();
     super.dispose();
   }
 
-  Future<void> _query(String q) async {
+  void _query(String q) {
+    _debounce?.cancel();
     if (q.trim().length < 3) {
       setState(() => _results = []);
       return;
     }
+    _debounce = Timer(const Duration(milliseconds: 400), () => _doSearch(q));
+  }
+
+  Future<void> _doSearch(String q) async {
     setState(() => _searching = true);
     try {
-      final uri = Uri.parse(
-        'https://nominatim.openstreetmap.org/search',
-      ).replace(queryParameters: {
-        'q': q,
-        'format': 'json',
-        'limit': '5',
-        'addressdetails': '1',
-      });
-      final res = await http.get(uri, headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'silat-arrahim/1.0',
-      });
+      final uri = Uri.parse('$_apiBase/api/geocode')
+          .replace(queryParameters: {'q': q});
+      final res = await http.get(uri, headers: {'Accept': 'application/json'});
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as List<dynamic>;
         setState(() {
@@ -96,7 +97,7 @@ class _LocationPickerState extends State<LocationPicker> {
       }
     } catch (_) {
     } finally {
-      setState(() => _searching = false);
+      if (mounted) setState(() => _searching = false);
     }
   }
 
