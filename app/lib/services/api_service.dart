@@ -2,11 +2,13 @@
 // Remote-only: no local SQLite. Riverpod holds data in memory.
 
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import '../models/member.dart';
 import '../models/relationship.dart';
+import '../models/attachment.dart';
 import '../services/auth_service.dart';
 
 class ApiService {
@@ -243,5 +245,93 @@ class ApiService {
       'steward_user_id': null,
       'steward_claim_token': null,
     });
+  }
+
+  // ── Attachments ───────────────────────────────────────────────────────────
+
+  Future<List<Attachment>> getAttachments(String memberId) async {
+    final res = await http.get(
+      Uri.parse('$_base/api/attachments').replace(
+        queryParameters: {'member_id': memberId},
+      ),
+      headers: _headers,
+    );
+    if (res.statusCode != 200) {
+      throw Exception('getAttachments failed: ${res.statusCode}');
+    }
+    return (jsonDecode(res.body) as List<dynamic>)
+        .map((j) => Attachment.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Attachment> uploadAttachment({
+    required String memberId,
+    required String filename,
+    required String mimeType,
+    required Uint8List bytes,
+    String? caption,
+  }) async {
+    final boundary = 'silat${const Uuid().v4().replaceAll('-', '')}';
+    final bodyBytes = _buildMultipart(
+      boundary: boundary,
+      memberId: memberId,
+      filename: filename,
+      mimeType: mimeType,
+      bytes: bytes,
+      caption: caption,
+    );
+    final res = await http.post(
+      Uri.parse('$_base/api/attachments'),
+      headers: {
+        ..._headers,
+        'Content-Type': 'multipart/form-data; boundary=$boundary',
+      },
+      body: bodyBytes,
+    );
+    if (res.statusCode != 201) {
+      throw Exception('uploadAttachment failed: ${res.statusCode} ${res.body}');
+    }
+    return Attachment.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deleteAttachment(String attachmentId) async {
+    final res = await http.delete(
+      Uri.parse('$_base/api/attachments/$attachmentId'),
+      headers: _headers,
+    );
+    if (res.statusCode != 200) {
+      throw Exception('deleteAttachment failed: ${res.statusCode}');
+    }
+  }
+
+  // Build minimal multipart body manually (avoids extra deps)
+  Uint8List _buildMultipart({
+    required String boundary,
+    required String memberId,
+    required String filename,
+    required String mimeType,
+    required Uint8List bytes,
+    String? caption,
+  }) {
+    final parts = <int>[];
+    void add(String s) => parts.addAll(s.codeUnits);
+    void addField(String name, String value) {
+      add('--$boundary\r\n');
+      add('Content-Disposition: form-data; name="$name"\r\n\r\n');
+      add(value);
+      add('\r\n');
+    }
+
+    addField('member_id', memberId);
+    if (caption != null && caption.isNotEmpty) addField('caption', caption);
+
+    add('--$boundary\r\n');
+    add('Content-Disposition: form-data; name="file"; filename="$filename"\r\n');
+    add('Content-Type: $mimeType\r\n\r\n');
+    parts.addAll(bytes);
+    add('\r\n');
+
+    add('--$boundary--\r\n');
+    return Uint8List.fromList(parts);
   }
 }

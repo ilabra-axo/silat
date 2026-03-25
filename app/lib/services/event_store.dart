@@ -5,9 +5,11 @@ import 'package:flutter/foundation.dart' show VoidCallback;
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart';
 
+import 'dart:typed_data';
 import '../services/api_service.dart';
 import '../models/member.dart' as m;
 import '../models/relationship.dart' as r;
+import '../models/attachment.dart';
 import '../models/life_event.dart';
 import '../db/database.dart';
 
@@ -231,6 +233,38 @@ class EventStore {
     final updated = await _api.revokeStewardship(member.id);
     _notify();
     return updated;
+  }
+
+  // ── Attachments ───────────────────────────────────────────────────────────
+
+  Future<List<Attachment>> getAttachments(String memberId) =>
+      _api.getAttachments(memberId);
+
+  Future<Attachment> uploadAttachment({
+    required String actorId,
+    required String memberId,
+    required String filename,
+    required String mimeType,
+    required Uint8List bytes,
+    String? caption,
+  }) async {
+    final att = await _api.uploadAttachment(
+      memberId: memberId,
+      filename: filename,
+      mimeType: mimeType,
+      bytes: bytes,
+      caption: caption,
+    );
+    _notify();
+    return att;
+  }
+
+  Future<void> deleteAttachment({
+    required String actorId,
+    required String attachmentId,
+  }) async {
+    await _api.deleteAttachment(attachmentId);
+    _notify();
   }
 
   // ── Life events (still local Drift for now) ───────────────────────────────

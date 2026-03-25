@@ -124,3 +124,23 @@ CREATE TABLE IF NOT EXISTS tree_participants (
 
 CREATE INDEX IF NOT EXISTS idx_tree_participants_user ON tree_participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_tree_participants_tree ON tree_participants(tree_id);
+
+-- ---------------------------------------------------------------------------
+-- Attachments (photos + documents on member profiles)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS attachments (
+  id          TEXT PRIMARY KEY,
+  member_id   TEXT NOT NULL,
+  tree_id     TEXT NOT NULL,
+  blob_url    TEXT NOT NULL,
+  filename    TEXT NOT NULL,
+  mime_type   TEXT NOT NULL,
+  byte_size   INTEGER,
+  caption     TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_attachments_member ON attachments(member_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_tree   ON attachments(tree_id);

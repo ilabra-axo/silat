@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -12,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../theme/silat_theme.dart';
 import '../../providers/providers.dart';
 import '../../models/member.dart';
+import '../../models/attachment.dart';
 import '../../models/kinship.dart';
 import '../../models/life_event.dart';
 
@@ -418,6 +421,14 @@ class MemberDetailScreen extends ConsumerWidget {
                                   actorId: user.id, member: member);
                             }
                           : null,
+                ),
+
+                const SizedBox(height: SilatSpacing.lg),
+
+                // Attachments (photos + documents)
+                _AttachmentsSection(
+                  memberId: memberId,
+                  isDark: isDark,
                 ),
 
                 const SizedBox(height: SilatSpacing.lg),
@@ -1338,6 +1349,241 @@ class _StewardshipTrack extends StatelessWidget {
           ],
         ]),
       ],
+    );
+  }
+}
+
+// ── Attachments section ─────────────────────────────────────────────────────
+
+class _AttachmentsSection extends ConsumerStatefulWidget {
+  const _AttachmentsSection({required this.memberId, required this.isDark});
+  final String memberId;
+  final bool isDark;
+
+  @override
+  ConsumerState<_AttachmentsSection> createState() => _AttachmentsSectionState();
+}
+
+class _AttachmentsSectionState extends ConsumerState<_AttachmentsSection> {
+  List<Attachment>? _attachments;
+  bool _loading = true;
+  bool _uploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final atts = await ref
+          .read(eventStoreProvider)
+          .getAttachments(widget.memberId);
+      if (mounted) setState(() { _attachments = atts; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _attachments = []; _loading = false; });
+    }
+  }
+
+  Future<void> _pickAndUpload() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    if (file.bytes == null) return;
+
+    setState(() => _uploading = true);
+    try {
+      final user = ref.read(currentUserProvider);
+      final att = await ref.read(eventStoreProvider).uploadAttachment(
+            actorId: user?.id ?? 'unknown',
+            memberId: widget.memberId,
+            filename: file.name,
+            mimeType: _mimeType(file.extension ?? 'bin'),
+            bytes: file.bytes!,
+          );
+      if (mounted) setState(() { _attachments = [...?_attachments, att]; });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _delete(Attachment att) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete attachment?'),
+        content: Text('Remove "${att.filename}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final user = ref.read(currentUserProvider);
+      await ref.read(eventStoreProvider).deleteAttachment(
+            actorId: user?.id ?? 'unknown',
+            attachmentId: att.id,
+          );
+      if (mounted) setState(() => _attachments?.remove(att));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _Section(
+      title: 'archive',
+      isDark: widget.isDark,
+      action: _uploading
+          ? const SizedBox(
+              width: 16, height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : IconButton(
+              icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+              onPressed: _pickAndUpload,
+              color: SilatColors.slate,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              tooltip: 'Add photo or document',
+            ),
+      child: _loading
+          ? const SizedBox(height: 40, child: Center(child: CircularProgressIndicator()))
+          : (_attachments == null || _attachments!.isEmpty)
+              ? Text('no photos or documents yet',
+                  style: SilatTypography.label(dark: widget.isDark))
+              : _AttachmentsGrid(
+                  attachments: _attachments!,
+                  isDark: widget.isDark,
+                  onDelete: _delete,
+                ),
+    );
+  }
+
+  static String _mimeType(String ext) => switch (ext.toLowerCase()) {
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'pdf' => 'application/pdf',
+        _ => 'application/octet-stream',
+      };
+}
+
+class _AttachmentsGrid extends StatelessWidget {
+  const _AttachmentsGrid({
+    required this.attachments,
+    required this.isDark,
+    required this.onDelete,
+  });
+
+  final List<Attachment> attachments;
+  final bool isDark;
+  final void Function(Attachment) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: SilatSpacing.xs,
+        mainAxisSpacing: SilatSpacing.xs,
+      ),
+      itemCount: attachments.length,
+      itemBuilder: (_, i) => _AttachmentThumb(
+        attachment: attachments[i],
+        isDark: isDark,
+        onDelete: () => onDelete(attachments[i]),
+      ),
+    );
+  }
+}
+
+class _AttachmentThumb extends StatelessWidget {
+  const _AttachmentThumb({
+    required this.attachment,
+    required this.isDark,
+    required this.onDelete,
+  });
+
+  final Attachment attachment;
+  final bool isDark;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => launchUrl(Uri.parse(attachment.blobUrl)),
+      onLongPress: onDelete,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(SilatRadius.sm),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Thumbnail
+            if (attachment.isImage)
+              Image.network(attachment.blobUrl, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _docThumb(context))
+            else
+              _docThumb(context),
+
+            // Filename overlay at bottom
+            Positioned(
+              left: 0, right: 0, bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 4, vertical: 2),
+                color: Colors.black54,
+                child: Text(
+                  attachment.filename,
+                  style: const TextStyle(
+                      fontSize: 8, color: Colors.white),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _docThumb(BuildContext context) {
+    return Container(
+      color: isDark ? SilatColors.bg2 : SilatColors.lbg2,
+      child: Center(
+        child: Icon(
+          attachment.isPdf
+              ? Icons.picture_as_pdf_outlined
+              : Icons.insert_drive_file_outlined,
+          size: 28,
+          color: SilatColors.slate,
+        ),
+      ),
     );
   }
 }
