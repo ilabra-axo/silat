@@ -31,10 +31,21 @@ export default async function handler(
     if (!upstream.ok) {
       return res.status(upstream.status).json({ error: "geocode upstream error" });
     }
-    const data = await upstream.json();
+    const data = await upstream.json() as any[];
+    const results = data.map((item: any) => ({
+      display_name: item.display_name as string,
+      lat: item.lat as string,
+      lon: item.lon as string,
+      city: (item.address?.city
+          || item.address?.town
+          || item.address?.village
+          || item.address?.municipality
+          || item.address?.county) as string | null ?? null,
+      country: (item.address?.country) as string | null ?? null,
+    }));
     // Cache for 1 hour — same query always returns same places
     res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
-    return res.status(200).json(data);
+    return res.status(200).json(results);
   } catch (err) {
     console.error("[geocode]", err);
     return res.status(502).json({ error: "geocode unavailable" });

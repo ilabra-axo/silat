@@ -101,6 +101,32 @@ final kinshipMapProvider =
   );
 });
 
+/// Kinship map from a specific member's perspective (not ego's).
+/// Used by MemberDetailScreen to show full connections including siblings/cousins.
+final memberKinshipProvider =
+    Provider.family<Map<String, KinshipResult>, String>((ref, memberId) {
+  final membersAsync = ref.watch(membersProvider);
+  final relsAsync = ref.watch(relationshipsProvider);
+
+  return membersAsync.when(
+    data: (members) => relsAsync.when(
+      data: (rels) {
+        final engine = ref.read(kinshipEngineProvider);
+        final results = engine.derive(
+          egoId: memberId,
+          members: members,
+          relationships: rels,
+        );
+        return {for (final r in results) r.alterId: r};
+      },
+      loading: () => {},
+      error: (_, __) => {},
+    ),
+    loading: () => {},
+    error: (_, __) => {},
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Theme mode
 // ---------------------------------------------------------------------------

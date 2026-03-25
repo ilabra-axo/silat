@@ -1,5 +1,5 @@
 // LocationPicker — Nominatim search + GPS + flutter_map tap.
-// Ported from rabble's LocationPicker, adapted to silat theme.
+// Proxies geocoding through /api/geocode (no browser CORS).
 // Returns lat/lng/label; H3 cell computed server-side on sync.
 
 import 'dart:async';
@@ -88,9 +88,11 @@ class _LocationPickerState extends State<LocationPicker> {
         setState(() {
           _results = data
               .map((j) => _Place(
-                    label: j['display_name'] as String,
+                    displayName: j['display_name'] as String,
                     lat: double.parse(j['lat'] as String),
                     lng: double.parse(j['lon'] as String),
+                    city: j['city'] as String?,
+                    country: j['country'] as String?,
                   ))
               .toList();
         });
@@ -102,10 +104,11 @@ class _LocationPickerState extends State<LocationPicker> {
   }
 
   void _pick(_Place place) {
+    final short = place.shortLabel;
     setState(() {
       _pin = LatLng(place.lat, place.lng);
-      _label = place.label.split(',').first.trim();
-      _search.text = _label!;
+      _label = short;
+      _search.text = short;
       _results = [];
     });
     _map.move(_pin!, 13);
@@ -152,11 +155,12 @@ class _LocationPickerState extends State<LocationPicker> {
   }
 
   void _onTap(TapPosition _, LatLng pt) {
+    final coordLabel =
+        '${pt.latitude.toStringAsFixed(4)}, ${pt.longitude.toStringAsFixed(4)}';
     setState(() {
       _pin = pt;
-      _label =
-          '${pt.latitude.toStringAsFixed(4)}, ${pt.longitude.toStringAsFixed(4)}';
-      _search.text = _label!;
+      _label = coordLabel;
+      _search.text = coordLabel;
       _results = [];
     });
     _emit();
@@ -215,17 +219,15 @@ class _LocationPickerState extends State<LocationPicker> {
               itemCount: _results.length,
               itemBuilder: (_, i) {
                 final r = _results[i];
-                final title = r.label.split(',').first.trim();
-                final sub = r.label;
                 return ListTile(
                   dense: true,
                   leading:
                       Icon(Icons.place_outlined, size: 16, color: SilatColors.fg3),
-                  title: Text(title,
+                  title: Text(r.shortLabel,
                       style: SilatTypography.body(dark: isDark),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
-                  subtitle: Text(sub,
+                  subtitle: Text(r.displayName,
                       style: SilatTypography.label(dark: isDark)
                           .copyWith(fontSize: 10),
                       maxLines: 1,
@@ -312,8 +314,33 @@ class _LocationPickerState extends State<LocationPicker> {
 }
 
 class _Place {
-  const _Place({required this.label, required this.lat, required this.lng});
-  final String label;
+  const _Place({
+    required this.displayName,
+    required this.lat,
+    required this.lng,
+    this.city,
+    this.country,
+  });
+
+  final String displayName;
   final double lat;
   final double lng;
+  final String? city;
+  final String? country;
+
+  String get shortLabel {
+    if (city != null && country != null && city != country) {
+      return '$city, $country';
+    }
+    if (city != null) return city!;
+    if (country != null) return country!;
+    // fallback: skip numeric-only leading segments
+    final parts = displayName
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty && !RegExp(r'^\d+$').hasMatch(s))
+        .take(2)
+        .toList();
+    return parts.join(', ');
+  }
 }

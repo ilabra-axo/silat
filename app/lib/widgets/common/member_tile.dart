@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../theme/silat_theme.dart';
 import '../../models/member.dart';
@@ -20,6 +22,7 @@ class MemberTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(
         horizontal: SilatSpacing.md,
@@ -28,34 +31,53 @@ class MemberTile extends StatelessWidget {
       leading: _Avatar(member: member, isEgo: isEgo),
       title: Text(
         member.displayName,
-        style: SilatTypography.body(dark: _isDark(context)).copyWith(
+        style: SilatTypography.body(dark: isDark).copyWith(
           color: isEgo ? SilatColors.terracotta : null,
           fontWeight: isEgo ? FontWeight.w500 : FontWeight.w400,
         ),
       ),
-      subtitle: _subtitle(context),
+      subtitle: _subtitle(context, isDark),
       trailing: kinshipLabel != null
-          ? _KinshipChip(label: kinshipLabel!)
+          ? _KinshipChip(label: kinshipLabel!, isEgo: isEgo)
           : null,
       onTap: onTap,
       onLongPress: onLongPress,
     );
   }
 
-  Widget? _subtitle(BuildContext context) {
+  Widget? _subtitle(BuildContext context, bool isDark) {
     final parts = <String>[];
+
+    // Lifespan / dates
     if (member.birthYear != null) {
       parts.add(member.isLiving
           ? 'b. ${member.birthYear}'
-          : '${member.birthYear}–${member.deathYear}');
+          : '${member.birthYear}–${member.deathYear ?? '?'}');
     }
-    if (member.locationLabel != null) parts.add(member.locationLabel!);
+
+    // City (first non-numeric segment of locationLabel)
+    final city = _extractCity(member.locationLabel);
+    if (city != null) parts.add(city);
+
     if (parts.isEmpty) return null;
 
     return Text(
       parts.join(' · '),
-      style: SilatTypography.label(dark: _isDark(context)),
+      style: SilatTypography.label(dark: isDark),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
+  }
+
+  static String? _extractCity(String? label) {
+    if (label == null || label.isEmpty) return null;
+    final parts = label
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty && !RegExp(r'^\d+$').hasMatch(s))
+        .toList();
+    if (parts.isEmpty) return null;
+    return parts.first;
   }
 
   bool _isDark(BuildContext context) =>
@@ -87,11 +109,9 @@ class _Avatar extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(SilatRadius.md),
       ),
+      clipBehavior: Clip.antiAlias,
       child: member.photoUrl != null
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(SilatRadius.md - 1),
-              child: Image.network(member.photoUrl!, fit: BoxFit.cover),
-            )
+          ? _buildPhoto(member.photoUrl!)
           : Center(
               child: Text(
                 member.initials,
@@ -127,11 +147,37 @@ class _Avatar extends StatelessWidget {
       ],
     );
   }
+
+  Widget _buildPhoto(String url) {
+    if (url.startsWith('data:')) {
+      final comma = url.indexOf(',');
+      if (comma != -1) {
+        try {
+          final bytes = base64Decode(url.substring(comma + 1));
+          return Image.memory(bytes, fit: BoxFit.cover, width: 44, height: 44);
+        } catch (_) {}
+      }
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      width: 44,
+      height: 44,
+      errorWidget: (_, __, ___) => Center(
+        child: Text(
+          member.initials,
+          style: SilatTypography.label(color: _color)
+              .copyWith(fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
 }
 
 class _KinshipChip extends StatelessWidget {
-  const _KinshipChip({required this.label});
+  const _KinshipChip({required this.label, required this.isEgo});
   final String label;
+  final bool isEgo;
 
   @override
   Widget build(BuildContext context) {
@@ -142,15 +188,21 @@ class _KinshipChip extends StatelessWidget {
         vertical: 3,
       ),
       decoration: BoxDecoration(
-        color: isDark ? SilatColors.bg2 : SilatColors.lbg2,
+        color: isEgo
+            ? SilatColors.terracotta.withValues(alpha: 0.12)
+            : (isDark ? SilatColors.bg2 : SilatColors.lbg2),
         borderRadius: BorderRadius.circular(SilatRadius.sm),
         border: Border.all(
-          color: isDark ? SilatColors.bg3 : SilatColors.lbg3,
+          color: isEgo
+              ? SilatColors.terracotta.withValues(alpha: 0.4)
+              : (isDark ? SilatColors.bg3 : SilatColors.lbg3),
         ),
       ),
       child: Text(
         label,
-        style: SilatTypography.label(dark: isDark),
+        style: SilatTypography.label(dark: isDark).copyWith(
+          color: isEgo ? SilatColors.terracotta : null,
+        ),
       ),
     );
   }

@@ -54,6 +54,7 @@ dependencies:
 
   # ui utilities
   intl: ^0.19.0
+  flutter_markdown: ^0.7.4
   cached_network_image: ^3.3.0
   url_launcher: ^6.2.0
   cupertino_icons: ^1.0.8

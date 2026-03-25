@@ -416,6 +416,33 @@ class EventStore {
     return updated;
   }
 
+  /// Direct self-claim: the logged-in user claims this profile as themselves.
+  /// No invite token needed — used when the archivist IS the person.
+  Future<m.Member> claimSelf({
+    required String actorId,
+    required m.Member member,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final updated = member.copyWith(
+      claimState: m.ClaimState.claimed,
+      ownerUserId: actorId,
+      clearClaimToken: true,
+      updatedAt: now,
+    );
+
+    await _append(
+      streamId: member.id,
+      streamType: StreamType.member,
+      eventType: EventType.profileClaimed,
+      payload: {'id': member.id, 'claimed_by': actorId, 'self_claim': true},
+      actorId: actorId,
+      occurredAt: now,
+    );
+
+    await _db.upsertMember(_memberToCompanion(updated));
+    return updated;
+  }
+
   // -------------------------------------------------------------------------
   // Stewardship commands (delegate archivist — parallel to identity claim)
   // -------------------------------------------------------------------------

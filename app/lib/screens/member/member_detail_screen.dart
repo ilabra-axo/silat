@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -10,34 +12,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../theme/silat_theme.dart';
 import '../../providers/providers.dart';
 import '../../models/member.dart';
-import '../../models/relationship.dart';
+import '../../models/kinship.dart';
 import '../../models/life_event.dart';
-import '../../services/event_store.dart';
 
-// ---------------------------------------------------------------------------
-// Role label helper — from the viewed member's perspective
-// ---------------------------------------------------------------------------
-String _roleLabel(String relType, bool viewedIsSource, Member other) {
-  if (relType == 'partner') return 'partner';
-  if (relType == 'parent-child') {
-    if (viewedIsSource) {
-      // viewed is parent → other is the child
-      return switch (other.gender) {
-        Gender.male => 'son',
-        Gender.female => 'daughter',
-        _ => 'child',
-      };
-    } else {
-      // viewed is child → other is the parent
-      return switch (other.gender) {
-        Gender.male => 'father',
-        Gender.female => 'mother',
-        _ => 'parent',
-      };
-    }
-  }
-  return relType;
-}
 
 class MemberDetailScreen extends ConsumerWidget {
   const MemberDetailScreen({super.key, required this.memberId});
@@ -80,6 +57,54 @@ class MemberDetailScreen extends ConsumerWidget {
                 icon: const Icon(Icons.edit_outlined),
                 onPressed: () => context.push('/members/$memberId/edit'),
                 tooltip: 'Edit',
+              ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                onSelected: (value) async {
+                  if (value == 'delete') {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Delete member?'),
+                        content: Text(
+                            'Remove ${member.displayName} and all their connections. This cannot be undone.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: TextButton.styleFrom(
+                                foregroundColor: Colors.red),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true && context.mounted) {
+                      await ref.read(eventStoreProvider).deleteMember(
+                            actorId:
+                                ref.read(currentUserProvider)?.id ?? 'unknown',
+                            memberId: memberId,
+                          );
+                      if (context.mounted) context.pop();
+                    }
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Delete member',
+                            style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -142,10 +167,42 @@ class MemberDetailScreen extends ConsumerWidget {
                           isDark: isDark,
                         ),
                       if (member.notes != null && member.notes!.isNotEmpty)
-                        _Row(
-                          label: 'notes',
-                          value: member.notes!,
-                          isDark: isDark,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: SilatSpacing.xs),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('bio',
+                                  style: SilatTypography.label(
+                                      dark: isDark,
+                                      color: SilatColors.fg3)),
+                              const SizedBox(height: SilatSpacing.xs),
+                              MarkdownBody(
+                                data: member.notes!,
+                                styleSheet: MarkdownStyleSheet(
+                                  p: SilatTypography.body(dark: isDark),
+                                  h1: SilatTypography.title(dark: isDark),
+                                  h2: SilatTypography.title(dark: isDark)
+                                      .copyWith(fontSize: 15),
+                                  h3: SilatTypography.label(dark: isDark)
+                                      .copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13),
+                                  strong: SilatTypography.body(dark: isDark)
+                                      .copyWith(fontWeight: FontWeight.w600),
+                                  em: SilatTypography.body(dark: isDark)
+                                      .copyWith(
+                                          fontStyle: FontStyle.italic),
+                                  blockquote:
+                                      SilatTypography.body(dark: isDark)
+                                          .copyWith(
+                                              color: SilatColors.fg3),
+                                  code: SilatTypography.mono(dark: isDark),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                     ],
                   ),
@@ -185,58 +242,77 @@ class MemberDetailScreen extends ConsumerWidget {
                 if (member.phone != null || member.whatsapp != null)
                   const SizedBox(height: SilatSpacing.lg),
 
-                // Relationships
-                relsAsync.when(
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
-                  data: (rels) {
-                    final connected = rels
-                        .where((r) => r.sourceId == memberId || r.targetId == memberId)
-                        .toList();
-                    if (connected.isEmpty) return const SizedBox.shrink();
+                // Connections — all kinship from this member's perspective
+                Builder(builder: (ctx) {
+                  final memberKin = ref.watch(memberKinshipProvider(memberId));
+                  final connections = memberKin.entries
+                      .where((e) =>
+                          e.value.degree <= 4 &&
+                          e.value.label != KinshipLabel.extendedFamily &&
+                          e.value.label != KinshipLabel.unrelated)
+                      .toList()
+                    ..sort((a, b) => a.value.degree.compareTo(b.value.degree));
 
-                    return _Section(
+                  if (connections.isEmpty) return const SizedBox.shrink();
+
+                  return relsAsync.when(
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                    data: (rels) => _Section(
                       title: 'connections',
                       isDark: isDark,
                       child: Column(
-                        children: connected.map((rel) {
-                          final otherId = rel.sourceId == memberId ? rel.targetId : rel.sourceId;
-                          final other = members.where((m) => m.id == otherId).firstOrNull;
+                        children: connections.map((entry) {
+                          final otherId = entry.key;
+                          final kinResult = entry.value;
+                          final other = members
+                              .where((m) => m.id == otherId)
+                              .firstOrNull;
                           if (other == null) return const SizedBox.shrink();
 
-                          final role = _roleLabel(rel.relType.code, rel.sourceId == memberId, other);
-                          final kinshipResult = kinshipMap[otherId];
-                          final egoLabel = (kinshipResult != null && kinshipResult.displayLabel != role)
-                              ? kinshipResult.displayLabel
-                              : null;
+                          final directRel = rels
+                              .where((r) =>
+                                  (r.sourceId == memberId &&
+                                      r.targetId == otherId) ||
+                                  (r.targetId == memberId &&
+                                      r.sourceId == otherId))
+                              .firstOrNull;
 
                           return _ConnectionTile(
                             member: other,
-                            role: role,
-                            egoLabel: egoLabel,
+                            role: kinResult.displayLabel,
                             isDark: isDark,
-                            silenceGap: rel.silenceGapDays,
+                            silenceGap: directRel?.silenceGapDays,
+                            hasDirectEdge: directRel != null,
                             onTap: () => context.push('/members/$otherId'),
-                            onLogContact: () async {
-                              await ref.read(eventStoreProvider).updateRelationship(
-                                actorId: ref.read(currentUserProvider)?.id ?? 'unknown',
-                                current: rel,
-                                lastContactAt: DateTime.now().toUtc(),
-                              );
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                  content: Text('contact logged'),
-                                  duration: Duration(seconds: 2),
-                                  behavior: SnackBarBehavior.floating,
-                                ));
-                              }
-                            },
+                            onLogContact: directRel != null
+                                ? () async {
+                                    await ref
+                                        .read(eventStoreProvider)
+                                        .updateRelationship(
+                                          actorId:
+                                              ref.read(currentUserProvider)?.id ??
+                                                  'unknown',
+                                          current: directRel,
+                                          lastContactAt:
+                                              DateTime.now().toUtc(),
+                                        );
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(const SnackBar(
+                                        content: Text('contact logged'),
+                                        duration: Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ));
+                                    }
+                                  }
+                                : null,
                           );
                         }).toList(),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                }),
 
                 const SizedBox(height: SilatSpacing.lg),
 
@@ -274,6 +350,22 @@ class MemberDetailScreen extends ConsumerWidget {
                 _ClaimSection(
                   member: member,
                   isDark: isDark,
+                  currentUserId: ref.read(currentUserProvider)?.id,
+                  onClaimSelf: member.claimState != ClaimState.claimed
+                      ? () async {
+                          final store = ref.read(eventStoreProvider);
+                          final user = ref.read(currentUserProvider)!;
+                          await store.claimSelf(
+                              actorId: user.id, member: member);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(const SnackBar(
+                              content: Text('Profile claimed as you'),
+                              behavior: SnackBarBehavior.floating,
+                            ));
+                          }
+                        }
+                      : null,
                   onSendIdentityInvite: () async {
                     final store = ref.read(eventStoreProvider);
                     final user = ref.read(currentUserProvider)!;
@@ -640,19 +732,19 @@ class _ConnectionTile extends StatelessWidget {
   const _ConnectionTile({
     required this.member,
     required this.role,
-    this.egoLabel,
     required this.isDark,
     required this.onTap,
     this.silenceGap,
+    this.hasDirectEdge = false,
     this.onLogContact,
   });
 
   final Member member;
   final String role;
-  final String? egoLabel;
   final bool isDark;
   final VoidCallback onTap;
   final int? silenceGap;
+  final bool hasDirectEdge;
   final VoidCallback? onLogContact;
 
   Color get _color => switch (member.gender) {
@@ -679,13 +771,16 @@ class _ConnectionTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(SilatRadius.sm),
                 border: Border.all(color: _color.withValues(alpha: 0.4)),
               ),
-              child: Center(
-                child: Text(
-                  member.initials,
-                  style: SilatTypography.label(color: _color)
-                      .copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
+              clipBehavior: Clip.antiAlias,
+              child: member.photoUrl != null
+                  ? _buildConnectionPhoto(member.photoUrl!)
+                  : Center(
+                      child: Text(
+                        member.initials,
+                        style: SilatTypography.label(color: _color)
+                            .copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
             ),
             const SizedBox(width: SilatSpacing.md),
             Expanded(
@@ -714,16 +809,6 @@ class _ConnectionTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (egoLabel != null) ...[
-                        const SizedBox(width: SilatSpacing.sm),
-                        Text(
-                          'your $egoLabel',
-                          style: SilatTypography.label(
-                            dark: isDark,
-                            color: SilatColors.slate,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                   if (silenceGap != null)
@@ -731,7 +816,7 @@ class _ConnectionTile extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 2),
                       child: _SilenceBadge(days: silenceGap!, isDark: isDark),
                     ),
-                  if (silenceGap == null)
+                  if (silenceGap == null && hasDirectEdge)
                     Text('contact never logged',
                         style: SilatTypography.label(dark: isDark)
                             .copyWith(fontSize: 10, color: SilatColors.fg3)),
@@ -759,6 +844,31 @@ class _ConnectionTile extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConnectionPhoto(String url) {
+    if (url.startsWith('data:')) {
+      final comma = url.indexOf(',');
+      if (comma != -1) {
+        try {
+          final bytes = base64Decode(url.substring(comma + 1));
+          return Image.memory(bytes, fit: BoxFit.cover, width: 36, height: 36);
+        } catch (_) {}
+      }
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      width: 36,
+      height: 36,
+      errorWidget: (_, __, ___) => Center(
+        child: Text(
+          member.initials,
+          style: SilatTypography.label(color: _color)
+              .copyWith(fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -979,6 +1089,8 @@ class _ClaimSection extends StatelessWidget {
   const _ClaimSection({
     required this.member,
     required this.isDark,
+    this.currentUserId,
+    this.onClaimSelf,
     required this.onSendIdentityInvite,
     this.onRevokeIdentity,
     required this.onSendStewardInvite,
@@ -987,6 +1099,8 @@ class _ClaimSection extends StatelessWidget {
 
   final Member member;
   final bool isDark;
+  final String? currentUserId;
+  final VoidCallback? onClaimSelf;
   final VoidCallback onSendIdentityInvite;
   final VoidCallback? onRevokeIdentity;
   final VoidCallback onSendStewardInvite;
@@ -1003,6 +1117,8 @@ class _ClaimSection extends StatelessWidget {
           _IdentityTrack(
             member: member,
             isDark: isDark,
+            currentUserId: currentUserId,
+            onClaimSelf: onClaimSelf,
             onSendInvite: onSendIdentityInvite,
             onRevoke: onRevokeIdentity,
           ),
@@ -1026,12 +1142,16 @@ class _IdentityTrack extends StatelessWidget {
   const _IdentityTrack({
     required this.member,
     required this.isDark,
+    this.currentUserId,
+    this.onClaimSelf,
     required this.onSendInvite,
     this.onRevoke,
   });
 
   final Member member;
   final bool isDark;
+  final String? currentUserId;
+  final VoidCallback? onClaimSelf;
   final VoidCallback onSendInvite;
   final VoidCallback? onRevoke;
 
@@ -1085,29 +1205,43 @@ class _IdentityTrack extends StatelessWidget {
         ),
         if (!isClaimed) ...[
           const SizedBox(height: SilatSpacing.sm),
-          Row(children: [
-            OutlinedButton.icon(
-              onPressed: onSendInvite,
-              icon: const Icon(Icons.link, size: 13),
-              label: Text(isPending ? 'copy new link' : 'send identity link'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: SilatColors.terracotta,
-                side: BorderSide(color: SilatColors.terracotta),
-                textStyle: SilatTypography.label(dark: isDark),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: SilatSpacing.md, vertical: SilatSpacing.xs),
+          Wrap(
+            spacing: SilatSpacing.sm,
+            runSpacing: SilatSpacing.sm,
+            children: [
+              if (onClaimSelf != null && currentUserId != null)
+                FilledButton.icon(
+                  onPressed: onClaimSelf,
+                  icon: Icon(Icons.how_to_reg_outlined, size: 13),
+                  label: const Text('this is me'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: SilatColors.terracotta,
+                    textStyle: SilatTypography.label(dark: isDark),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: SilatSpacing.md, vertical: SilatSpacing.xs),
+                  ),
+                ),
+              OutlinedButton.icon(
+                onPressed: onSendInvite,
+                icon: const Icon(Icons.link, size: 13),
+                label: Text(isPending ? 'copy new link' : 'send to someone else'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: SilatColors.terracotta,
+                  side: BorderSide(color: SilatColors.terracotta),
+                  textStyle: SilatTypography.label(dark: isDark),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: SilatSpacing.md, vertical: SilatSpacing.xs),
+                ),
               ),
-            ),
-            if (onRevoke != null) ...[
-              const SizedBox(width: SilatSpacing.sm),
-              TextButton(
-                onPressed: onRevoke,
-                child: Text('revoke',
-                    style: SilatTypography.label(dark: isDark)
-                        .copyWith(color: SilatColors.fg3)),
-              ),
+              if (onRevoke != null)
+                TextButton(
+                  onPressed: onRevoke,
+                  child: Text('revoke',
+                      style: SilatTypography.label(dark: isDark)
+                          .copyWith(color: SilatColors.fg3)),
+                ),
             ],
-          ]),
+          ),
         ],
       ],
     );
