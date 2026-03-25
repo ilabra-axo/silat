@@ -80,8 +80,6 @@ class MemberTile extends StatelessWidget {
     return parts.first;
   }
 
-  bool _isDark(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark;
 }
 
 class _Avatar extends StatelessWidget {
