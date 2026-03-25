@@ -109,3 +109,18 @@ CREATE TABLE IF NOT EXISTS life_events (
 
 CREATE INDEX IF NOT EXISTS idx_life_events_member ON life_events(member_id);
 CREATE INDEX IF NOT EXISTS idx_life_events_tree   ON life_events(tree_id);
+
+-- ---------------------------------------------------------------------------
+-- Tree participants (shared access)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS tree_participants (
+  user_id   TEXT NOT NULL,
+  tree_id   TEXT NOT NULL,
+  role      TEXT NOT NULL DEFAULT 'member',
+  joined_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, tree_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tree_participants_user ON tree_participants(user_id);
+CREATE INDEX IF NOT EXISTS idx_tree_participants_tree ON tree_participants(tree_id);

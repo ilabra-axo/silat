@@ -74,8 +74,7 @@ class _AuthInitializerState extends ConsumerState<_AuthInitializer> {
     await auth.initialize();
     if (auth.currentUser != null && mounted) {
       ref.read(currentUserProvider.notifier).state = auth.currentUser;
-      ref.read(syncServiceProvider).sync();
-      ref.read(syncServiceProvider).startPeriodicSync();
+      ref.invalidate(familyDataProvider);
     }
 
     if (mounted) setState(() => _ready = true);

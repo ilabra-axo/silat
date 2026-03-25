@@ -1,24 +1,26 @@
-// EventStore — command side of CQRS.
-// All writes pass through here: create event → project onto read model → queue sync.
+// EventStore — writes go directly to the API.
+// After each write, onDataChanged() is called to trigger Riverpod refresh.
 
-import 'dart:convert';
-import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show VoidCallback;
 import 'package:uuid/uuid.dart';
+import 'package:drift/drift.dart';
 
-import '../db/database.dart';
+import '../services/api_service.dart';
 import '../models/member.dart' as m;
 import '../models/relationship.dart' as r;
 import '../models/life_event.dart';
-import '../models/event.dart';
+import '../db/database.dart';
 
 class EventStore {
-  EventStore(this._db);
+  EventStore(this._api, {this.onDataChanged, SilatDatabase? db}) : _db = db;
 
-  final SilatDatabase _db;
+  final ApiService _api;
+  final VoidCallback? onDataChanged;
+  final SilatDatabase? _db;
 
-  // -------------------------------------------------------------------------
-  // Member commands
-  // -------------------------------------------------------------------------
+  void _notify() => onDataChanged?.call();
+
+  // ── Member commands ───────────────────────────────────────────────────────
 
   Future<m.Member> addMember({
     required String actorId,
@@ -41,11 +43,7 @@ class EventStore {
     String? whatsapp,
     bool isUrgent = false,
   }) async {
-    final id = const Uuid().v4().substring(0, 7);
-    final now = DateTime.now().toUtc();
-
-    final member = m.Member(
-      id: id,
+    final member = await _api.createMember(
       firstName: firstName,
       lastName: lastName,
       birthDate: birthDate,
@@ -64,20 +62,8 @@ class EventStore {
       phone: phone,
       whatsapp: whatsapp,
       isUrgent: isUrgent,
-      createdAt: now,
-      updatedAt: now,
     );
-
-    await _append(
-      streamId: id,
-      streamType: StreamType.member,
-      eventType: EventType.memberAdded,
-      payload: member.toJson(),
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertMember(_memberToCompanion(member));
+    _notify();
     return member;
   }
 
@@ -103,62 +89,28 @@ class EventStore {
     String? whatsapp,
     bool? isUrgent,
   }) async {
-    final now = DateTime.now().toUtc();
-    final updated = current.copyWith(
-      firstName: firstName,
-      lastName: lastName,
-      birthDate: birthDate,
-      deathDate: deathDate,
-      gender: gender,
-      locationLabel: locationLabel,
-      latitude: latitude,
-      longitude: longitude,
-      residenceH3: residenceH3,
-      birthLocationLabel: birthLocationLabel,
-      birthLatitude: birthLatitude,
-      birthLongitude: birthLongitude,
-      birthH3: birthH3,
-      notes: notes,
-      photoUrl: photoUrl,
-      phone: phone,
-      whatsapp: whatsapp,
-      isUrgent: isUrgent,
-      updatedAt: now,
-    );
-
-    final delta = <String, dynamic>{
-      'id': current.id,
+    final fields = <String, dynamic>{
       if (firstName != null) 'first_name': firstName,
       if (lastName != null) 'last_name': lastName,
       if (birthDate != null) 'birth_date': birthDate.toIso8601String(),
       if (deathDate != null) 'death_date': deathDate.toIso8601String(),
       if (gender != null) 'gender': gender.code,
-      if (locationLabel != null) 'location_label': locationLabel,
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
-      if (residenceH3 != null) 'residence_h3': residenceH3,
-      if (birthLocationLabel != null) 'birth_location_label': birthLocationLabel,
-      if (birthLatitude != null) 'birth_latitude': birthLatitude,
-      if (birthLongitude != null) 'birth_longitude': birthLongitude,
-      if (birthH3 != null) 'birth_h3': birthH3,
-      if (notes != null) 'notes': notes,
-      if (photoUrl != null) 'photo_url': photoUrl,
-      if (phone != null) 'phone': phone,
-      if (whatsapp != null) 'whatsapp': whatsapp,
-      if (isUrgent != null && isUrgent != current.isUrgent) 'is_urgent': isUrgent,
-      'updated_at': now.toIso8601String(),
+      'location_label': locationLabel,
+      'latitude': latitude,
+      'longitude': longitude,
+      'residence_h3': residenceH3,
+      'birth_location_label': birthLocationLabel,
+      'birth_latitude': birthLatitude,
+      'birth_longitude': birthLongitude,
+      'birth_h3': birthH3,
+      'notes': notes,
+      'photo_url': photoUrl,
+      'phone': phone,
+      'whatsapp': whatsapp,
+      if (isUrgent != null) 'is_urgent': isUrgent,
     };
-
-    await _append(
-      streamId: current.id,
-      streamType: StreamType.member,
-      eventType: EventType.memberUpdated,
-      payload: delta,
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertMember(_memberToCompanion(updated));
+    final updated = await _api.updateMember(current.id, fields);
+    _notify();
     return updated;
   }
 
@@ -166,27 +118,11 @@ class EventStore {
     required String actorId,
     required String memberId,
   }) async {
-    final now = DateTime.now().toUtc();
-
-    await _append(
-      streamId: memberId,
-      streamType: StreamType.member,
-      eventType: EventType.memberDeleted,
-      payload: {'id': memberId},
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    final rels = await _db.getRelationshipsForMember(memberId);
-    for (final rel in rels) {
-      await _db.deleteRelationship(rel.id);
-    }
-    await _db.deleteMember(memberId);
+    await _api.deleteMember(memberId);
+    _notify();
   }
 
-  // -------------------------------------------------------------------------
-  // Relationship commands
-  // -------------------------------------------------------------------------
+  // ── Relationship commands ─────────────────────────────────────────────────
 
   Future<r.Relationship?> createRelationship({
     required String actorId,
@@ -194,122 +130,22 @@ class EventStore {
     required String targetId,
     required r.RelType relType,
   }) async {
-    final existing = await _db.getAllRelationships();
-    final duplicate = existing.any((rel) =>
-        rel.sourceId == sourceId &&
-        rel.targetId == targetId &&
-        rel.relType == relType.code);
-
-    if (duplicate) return null;
-
-    final id = const Uuid().v4().substring(0, 7);
-    final now = DateTime.now().toUtc();
-
-    final relationship = r.Relationship(
-      id: id,
+    final rel = await _api.createRelationship(
       sourceId: sourceId,
       targetId: targetId,
       relType: relType,
-      createdAt: now,
     );
-
-    await _append(
-      streamId: id,
-      streamType: StreamType.relationship,
-      eventType: EventType.relationshipCreated,
-      payload: relationship.toJson(),
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertRelationship(_relToCompanion(relationship));
-    return relationship;
+    if (rel != null) _notify();
+    return rel;
   }
 
   Future<void> deleteRelationship({
     required String actorId,
     required String relationshipId,
   }) async {
-    final now = DateTime.now().toUtc();
-
-    await _append(
-      streamId: relationshipId,
-      streamType: StreamType.relationship,
-      eventType: EventType.relationshipDeleted,
-      payload: {'id': relationshipId},
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.deleteRelationship(relationshipId);
+    await _api.deleteRelationship(relationshipId);
+    _notify();
   }
-
-  // -------------------------------------------------------------------------
-  // Internal helpers
-  // -------------------------------------------------------------------------
-
-  Future<void> _append({
-    required String streamId,
-    required StreamType streamType,
-    required EventType eventType,
-    required Map<String, dynamic> payload,
-    required String actorId,
-    required DateTime occurredAt,
-  }) async {
-    await _db.appendEvent(EventsCompanion(
-      id: Value(const Uuid().v4().replaceAll('-', '').substring(0, 12)),
-      streamId: Value(streamId),
-      streamType: Value(streamType.code),
-      eventType: Value(eventType.code),
-      payloadJson: Value(jsonEncode(payload)),
-      actorId: Value(actorId),
-      occurredAt: Value(occurredAt),
-      synced: const Value(false),
-    ));
-  }
-
-  MembersCompanion _memberToCompanion(m.Member member) => MembersCompanion(
-        id: Value(member.id),
-        firstName: Value(member.firstName),
-        lastName: Value(member.lastName),
-        birthDate: Value(member.birthDate),
-        deathDate: Value(member.deathDate),
-        gender: Value(member.gender.code),
-        locationLabel: Value(member.locationLabel),
-        latitude: Value(member.latitude),
-        longitude: Value(member.longitude),
-        residenceH3: Value(member.residenceH3),
-        birthLocationLabel: Value(member.birthLocationLabel),
-        birthLatitude: Value(member.birthLatitude),
-        birthLongitude: Value(member.birthLongitude),
-        birthH3: Value(member.birthH3),
-        notes: Value(member.notes),
-        photoUrl: Value(member.photoUrl),
-        phone: Value(member.phone),
-        whatsapp: Value(member.whatsapp),
-        isUrgent: Value(member.isUrgent),
-        claimState: Value(member.claimState.code),
-        ownerUserId: Value(member.ownerUserId),
-        claimToken: Value(member.claimToken),
-        stewardshipState: Value(member.stewardshipState.code),
-        stewardUserId: Value(member.stewardUserId),
-        stewardClaimToken: Value(member.stewardClaimToken),
-        createdAt: Value(member.createdAt),
-        updatedAt: Value(member.updatedAt),
-      );
-
-  RelationshipsCompanion _relToCompanion(r.Relationship rel) =>
-      RelationshipsCompanion(
-        id: Value(rel.id),
-        sourceId: Value(rel.sourceId),
-        targetId: Value(rel.targetId),
-        relType: Value(rel.relType.code),
-        lastContactAt: Value(rel.lastContactAt),
-        relNotes: Value(rel.notes),
-        salience: Value(rel.salience),
-        interventionMode: Value(rel.interventionMode.code),
-        createdAt: Value(rel.createdAt),
-      );
 
   Future<r.Relationship> updateRelationship({
     required String actorId,
@@ -319,279 +155,96 @@ class EventStore {
     double? salience,
     r.InterventionMode? interventionMode,
   }) async {
-    final now = DateTime.now().toUtc();
-    final updated = r.Relationship(
-      id: current.id,
-      sourceId: current.sourceId,
-      targetId: current.targetId,
-      relType: current.relType,
-      lastContactAt: lastContactAt ?? current.lastContactAt,
-      notes: notes ?? current.notes,
-      salience: salience ?? current.salience,
-      interventionMode: interventionMode ?? current.interventionMode,
-      createdAt: current.createdAt,
+    final updated = await _api.updateRelationship(
+      current.id,
+      lastContactAt: lastContactAt,
+      notes: notes,
+      salience: salience,
+      interventionMode: interventionMode,
     );
-
-    final delta = <String, dynamic>{
-      'id': current.id,
-      if (lastContactAt != null) 'last_contact_at': lastContactAt.toIso8601String(),
-      if (notes != null) 'notes': notes,
-      if (salience != null) 'salience': salience,
-      if (interventionMode != null) 'intervention_mode': interventionMode.code,
-      'updated_at': now.toIso8601String(),
-    };
-
-    await _append(
-      streamId: current.id,
-      streamType: StreamType.relationship,
-      eventType: EventType.relationshipCreated, // reuse — update recorded in event log
-      payload: delta,
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertRelationship(_relToCompanion(updated));
+    _notify();
     return updated;
   }
 
-  // -------------------------------------------------------------------------
-  // Claim commands
-  // -------------------------------------------------------------------------
+  // ── Claim commands ────────────────────────────────────────────────────────
 
-  /// Generates a one-time claim token and records a ClaimInviteSent event.
-  /// Returns the updated member (with claimToken set) whose invite link can
-  /// be shared as: https://silat.ooo/#/claim?t=<token>
   Future<m.Member> sendClaimInvite({
     required String actorId,
     required m.Member member,
   }) async {
-    final token = const Uuid().v4();
-    final now = DateTime.now().toUtc();
-    final updated = member.copyWith(
-      claimState: m.ClaimState.claimPending,
-      claimToken: token,
-      updatedAt: now,
-    );
-
-    await _append(
-      streamId: member.id,
-      streamType: StreamType.member,
-      eventType: EventType.claimInviteSent,
-      payload: {'id': member.id, 'token': token, 'invited_by': actorId},
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertMember(_memberToCompanion(updated));
+    final updated = await _api.sendClaimInvite(member.id);
+    _notify();
     return updated;
   }
 
-  /// Called when a user taps a claim link and has authenticated.
   Future<m.Member> claimProfile({
     required String actorId,
     required m.Member member,
     required String token,
   }) async {
-    if (member.claimToken != token) {
-      throw ArgumentError('Invalid claim token');
-    }
-    final now = DateTime.now().toUtc();
-    final updated = member.copyWith(
-      claimState: m.ClaimState.claimed,
-      ownerUserId: actorId,
-      clearClaimToken: true,
-      updatedAt: now,
-    );
-
-    await _append(
-      streamId: member.id,
-      streamType: StreamType.member,
-      eventType: EventType.profileClaimed,
-      payload: {'id': member.id, 'claimed_by': actorId, 'token': token},
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertMember(_memberToCompanion(updated));
+    final updated = await _api.claimProfile(token);
+    _notify();
     return updated;
   }
 
-  /// Direct self-claim: the logged-in user claims this profile as themselves.
-  /// No invite token needed — used when the archivist IS the person.
   Future<m.Member> claimSelf({
     required String actorId,
     required m.Member member,
   }) async {
-    final now = DateTime.now().toUtc();
-    final updated = member.copyWith(
-      claimState: m.ClaimState.claimed,
-      ownerUserId: actorId,
-      clearClaimToken: true,
-      updatedAt: now,
-    );
-
-    await _append(
-      streamId: member.id,
-      streamType: StreamType.member,
-      eventType: EventType.profileClaimed,
-      payload: {'id': member.id, 'claimed_by': actorId, 'self_claim': true},
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertMember(_memberToCompanion(updated));
+    final updated = await _api.claimSelf(member.id);
+    _notify();
     return updated;
   }
 
-  // -------------------------------------------------------------------------
-  // Stewardship commands (delegate archivist — parallel to identity claim)
-  // -------------------------------------------------------------------------
+  Future<m.Member> revokeClaimInvite({
+    required String actorId,
+    required m.Member member,
+  }) async {
+    final updated = await _api.revokeClaimInvite(member.id);
+    _notify();
+    return updated;
+  }
 
-  /// Sends a stewardship invite to another archivist who knows this branch.
-  /// The invitee clicks https://silat.ooo/#/claim?t=<token>&type=steward
-  /// Stewardship does NOT block the real person from later claiming identity.
   Future<m.Member> sendStewardshipInvite({
     required String actorId,
     required m.Member member,
   }) async {
-    final token = const Uuid().v4();
-    final now = DateTime.now().toUtc();
-    final updated = member.copyWith(
-      stewardshipState: m.StewardshipState.pending,
-      stewardClaimToken: token,
-      updatedAt: now,
-    );
-
-    await _append(
-      streamId: member.id,
-      streamType: StreamType.member,
-      eventType: EventType.stewardshipInviteSent,
-      payload: {
-        'id': member.id,
-        'steward_token': token,
-        'invited_by': actorId,
-      },
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertMember(_memberToCompanion(updated));
+    final updated = await _api.sendStewardshipInvite(member.id);
+    _notify();
     return updated;
   }
 
-  /// Called when an archivist accepts a stewardship invite.
   Future<m.Member> claimStewardship({
     required String actorId,
     required m.Member member,
     required String token,
   }) async {
-    if (member.stewardClaimToken != token) {
-      throw ArgumentError('Invalid stewardship token');
-    }
-    final now = DateTime.now().toUtc();
-    final updated = member.copyWith(
-      stewardshipState: m.StewardshipState.active,
-      stewardUserId: actorId,
-      clearStewardClaimToken: true,
-      updatedAt: now,
-    );
-
-    await _append(
-      streamId: member.id,
-      streamType: StreamType.member,
-      eventType: EventType.stewardshipClaimed,
-      payload: {
-        'id': member.id,
-        'steward_user_id': actorId,
-        'token': token,
-      },
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertMember(_memberToCompanion(updated));
+    final updated = await _api.claimProfile(token, steward: true);
+    _notify();
     return updated;
   }
 
-  /// Revokes an active stewardship (either party can revoke).
   Future<m.Member> revokeStewardship({
     required String actorId,
     required m.Member member,
   }) async {
-    final now = DateTime.now().toUtc();
-    final updated = member.copyWith(
-      stewardshipState: m.StewardshipState.none,
-      clearStewardUserId: true,
-      clearStewardClaimToken: true,
-      updatedAt: now,
-    );
-
-    await _append(
-      streamId: member.id,
-      streamType: StreamType.member,
-      eventType: EventType.stewardshipRevoked,
-      payload: {'id': member.id, 'revoked_by': actorId},
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertMember(_memberToCompanion(updated));
+    final updated = await _api.revokeStewardship(member.id);
+    _notify();
     return updated;
   }
 
-  /// Archivist revokes a pending claim invite (e.g. wrong person).
-  Future<m.Member> revokeClaimInvite({
-    required String actorId,
-    required m.Member member,
-  }) async {
-    final now = DateTime.now().toUtc();
-    final updated = member.copyWith(
-      claimState: m.ClaimState.seeded,
-      clearClaimToken: true,
-      updatedAt: now,
-    );
+  // ── Life events (still local Drift for now) ───────────────────────────────
 
-    await _append(
-      streamId: member.id,
-      streamType: StreamType.member,
-      eventType: EventType.claimRevoked,
-      payload: {'id': member.id, 'revoked_by': actorId},
-      actorId: actorId,
-      occurredAt: now,
-    );
-
-    await _db.upsertMember(_memberToCompanion(updated));
-    return updated;
-  }
-
-  Future<LifeEvent> addLifeEvent({
+  Future<void> addLifeEvent({
     required String actorId,
     required String memberId,
     required LifeEventType eventType,
     required DateTime occurredAt,
     String? notes,
   }) async {
-    final id = const Uuid().v4().substring(0, 7);
+    if (_db == null) return;
+    final id = const Uuid().v4().substring(0, 8);
     final now = DateTime.now().toUtc();
-
-    final event = LifeEvent(
-      id: id,
-      memberId: memberId,
-      eventType: eventType,
-      occurredAt: occurredAt,
-      notes: notes,
-      createdAt: now,
-    );
-
-    await _append(
-      streamId: memberId,
-      streamType: StreamType.member,
-      eventType: EventType.memberUpdated,
-      payload: event.toJson(),
-      actorId: actorId,
-      occurredAt: now,
-    );
-
     await _db.insertLifeEvent(LifeEventsCompanion(
       id: Value(id),
       memberId: Value(memberId),
@@ -600,7 +253,5 @@ class EventStore {
       notes: Value(notes),
       createdAt: Value(now),
     ));
-
-    return event;
   }
 }

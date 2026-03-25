@@ -39,57 +39,21 @@ class _ClaimScreenState extends ConsumerState<ClaimScreen> {
   }
 
   Future<void> _applyClaim() async {
-    final members = ref.read(membersProvider).value;
-    if (members == null) {
-      _fail('Could not load members. Please try again.');
-      return;
-    }
-
     final user = ref.read(currentUserProvider);
     if (user == null) {
       _fail('Please sign in first to accept this invite.');
       return;
     }
 
-    final store = ref.read(eventStoreProvider);
-
     try {
-      if (_claimType == _ClaimType.stewardship) {
-        final match = members
-            .where((m) => m.stewardClaimToken == widget.token)
-            .firstOrNull;
-        if (match == null) {
-          _fail('This stewardship invite is invalid or has already been used.');
-          return;
-        }
-        if (match.hasSteward) {
-          _fail('This profile already has an active steward.');
-          return;
-        }
-        final claimed = await store.claimStewardship(
-          actorId: user.id,
-          member: match,
-          token: widget.token,
-        );
-        _succeed(claimed);
-      } else {
-        final match =
-            members.where((m) => m.claimToken == widget.token).firstOrNull;
-        if (match == null) {
-          _fail('This invite link is invalid or has already been used.');
-          return;
-        }
-        if (match.isClaimed) {
-          _fail('This profile has already been claimed.');
-          return;
-        }
-        final claimed = await store.claimProfile(
-          actorId: user.id,
-          member: match,
-          token: widget.token,
-        );
-        _succeed(claimed);
-      }
+      final api = ref.read(apiServiceProvider);
+      final claimed = await api.claimProfile(
+        widget.token,
+        steward: _claimType == _ClaimType.stewardship,
+      );
+      // Refresh the data so the user sees the family tree
+      ref.invalidate(familyDataProvider);
+      _succeed(claimed);
     } catch (e) {
       _fail(e.toString());
     }
