@@ -33,7 +33,7 @@ export async function requireAuth(
   // Validate token by calling ABW /me
   let abwUser: { user_id: string; email: string; display_name: string };
   try {
-    const abwRes = await fetch("https://agent-bestiary.world/me", {
+    const abwRes = await fetch("https://agent-bestiary.world/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!abwRes.ok) {

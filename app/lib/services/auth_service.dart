@@ -83,7 +83,7 @@ class AuthService {
     Map<String, dynamic> profile = {'id': userId};
     try {
       final res = await http.get(
-        Uri.parse('$_abwUrl/me'),
+        Uri.parse('$_abwUrl/api/auth/me'),
         headers: {'Authorization': 'Bearer $token'},
       );
       if (res.statusCode == 200) {
