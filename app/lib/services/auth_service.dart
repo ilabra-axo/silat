@@ -99,16 +99,6 @@ class AuthService {
     return user;
   }
 
-  // Used by the dev bypass button only.
-  Future<SilatUser?> handleOAuthCallback({
-    required Map<String, dynamic> userJson,
-    required String token,
-  }) async {
-    final user = SilatUser.fromJson(userJson, token);
-    await _persist(user);
-    return user;
-  }
-
   Future<void> _persist(SilatUser user) async {
     _currentUser = user;
     final prefs = await SharedPreferences.getInstance();
