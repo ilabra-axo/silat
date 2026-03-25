@@ -31,7 +31,6 @@ class FamilyShell extends ConsumerWidget {
             unselectedLabelColor: SilatColors.fg3,
             indicatorColor: SilatColors.terracotta,
             indicatorSize: TabBarIndicatorSize.label,
-            iconSize: 16,
           ),
         ),
         body: const TabBarView(
