@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import '../../theme/silat_theme.dart';
 import '../../providers/providers.dart';
 import '../../models/member.dart';
+import '../../widgets/common/location_picker.dart';
 
 final _dateFmt = DateFormat('d MMM yyyy');
 
@@ -30,15 +31,9 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
   late final TextEditingController _lastName;
   late final TextEditingController _notes;
 
-  // Residence
-  late final TextEditingController _residenceLabel;
-  late final TextEditingController _residenceLat;
-  late final TextEditingController _residenceLon;
-
-  // Birth location
-  late final TextEditingController _birthLabel;
-  late final TextEditingController _birthLat;
-  late final TextEditingController _birthLon;
+  // Residence & birth location — set via LocationPicker
+  LocationResult? _residenceLoc;
+  LocationResult? _birthLoc;
 
   // Contact
   late final TextEditingController _phone;
@@ -58,12 +53,6 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
     _firstName = TextEditingController();
     _lastName = TextEditingController();
     _notes = TextEditingController();
-    _residenceLabel = TextEditingController();
-    _residenceLat = TextEditingController();
-    _residenceLon = TextEditingController();
-    _birthLabel = TextEditingController();
-    _birthLat = TextEditingController();
-    _birthLon = TextEditingController();
     _phone = TextEditingController();
     _whatsapp = TextEditingController();
   }
@@ -79,12 +68,20 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
         _firstName.text = found.firstName;
         _lastName.text = found.lastName ?? '';
         _notes.text = found.notes ?? '';
-        _residenceLabel.text = found.locationLabel ?? '';
-        _residenceLat.text = found.latitude?.toString() ?? '';
-        _residenceLon.text = found.longitude?.toString() ?? '';
-        _birthLabel.text = found.birthLocationLabel ?? '';
-        _birthLat.text = found.birthLatitude?.toString() ?? '';
-        _birthLon.text = found.birthLongitude?.toString() ?? '';
+        if (found.latitude != null && found.longitude != null) {
+          _residenceLoc = LocationResult(
+            lat: found.latitude!,
+            lng: found.longitude!,
+            label: found.locationLabel ?? '',
+          );
+        }
+        if (found.birthLatitude != null && found.birthLongitude != null) {
+          _birthLoc = LocationResult(
+            lat: found.birthLatitude!,
+            lng: found.birthLongitude!,
+            label: found.birthLocationLabel ?? '',
+          );
+        }
         _phone.text = found.phone ?? '';
         _whatsapp.text = found.whatsapp ?? '';
         _birthDate = found.birthDate;
@@ -98,12 +95,7 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [
-      _firstName, _lastName, _notes,
-      _residenceLabel, _residenceLat, _residenceLon,
-      _birthLabel, _birthLat, _birthLon,
-      _phone, _whatsapp,
-    ]) {
+    for (final c in [_firstName, _lastName, _notes, _phone, _whatsapp]) {
       c.dispose();
     }
     super.dispose();
@@ -146,14 +138,12 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
     final store = ref.read(eventStoreProvider);
     final user = ref.read(currentUserProvider)!;
 
-    String? residenceLabel = _residenceLabel.text.trim().isEmpty
-        ? null : _residenceLabel.text.trim();
-    double? residenceLat = double.tryParse(_residenceLat.text);
-    double? residenceLon = double.tryParse(_residenceLon.text);
-    String? birthLabel = _birthLabel.text.trim().isEmpty
-        ? null : _birthLabel.text.trim();
-    double? birthLat = double.tryParse(_birthLat.text);
-    double? birthLon = double.tryParse(_birthLon.text);
+    String? residenceLabel = _residenceLoc?.label.isEmpty == false ? _residenceLoc!.label : null;
+    double? residenceLat = _residenceLoc?.lat;
+    double? residenceLon = _residenceLoc?.lng;
+    String? birthLabel = _birthLoc?.label.isEmpty == false ? _birthLoc!.label : null;
+    double? birthLat = _birthLoc?.lat;
+    double? birthLon = _birthLoc?.lng;
     String? notes = _notes.text.trim().isEmpty ? null : _notes.text.trim();
     String? lastName = _lastName.text.trim().isEmpty
         ? null : _lastName.text.trim();
@@ -306,79 +296,35 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
               // ── Residence ─────────────────────────────────────────────────
               _sectionLabel('residence', isDark),
               const SizedBox(height: SilatSpacing.sm),
-              _field(controller: _residenceLabel, label: 'place name', isDark: isDark),
-              const SizedBox(height: SilatSpacing.md),
-              Row(children: [
-                Expanded(child: _field(
-                  controller: _residenceLat,
-                  label: 'latitude',
-                  isDark: isDark,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return null;
-                    final d = double.tryParse(v);
-                    if (d == null || d < -90 || d > 90) return 'invalid';
-                    return null;
-                  },
-                )),
-                const SizedBox(width: SilatSpacing.md),
-                Expanded(child: _field(
-                  controller: _residenceLon,
-                  label: 'longitude',
-                  isDark: isDark,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return null;
-                    final d = double.tryParse(v);
-                    if (d == null || d < -180 || d > 180) return 'invalid';
-                    return null;
-                  },
-                )),
-              ]),
-              _GeoHexDisplay(
-                lat: double.tryParse(_residenceLat.text),
-                lon: double.tryParse(_residenceLon.text),
-                isDark: isDark,
+              LocationPicker(
+                initial: _residenceLoc,
+                onSelected: (r) => setState(() => _residenceLoc = r),
               ),
+              if (_residenceLoc != null) ...[
+                const SizedBox(height: SilatSpacing.xs),
+                _GeoHexDisplay(
+                  lat: _residenceLoc!.lat,
+                  lon: _residenceLoc!.lng,
+                  isDark: isDark,
+                ),
+              ],
               const SizedBox(height: SilatSpacing.lg),
 
               // ── Birth location ────────────────────────────────────────────
               _sectionLabel('place of birth', isDark),
               const SizedBox(height: SilatSpacing.sm),
-              _field(controller: _birthLabel, label: 'place name', isDark: isDark),
-              const SizedBox(height: SilatSpacing.md),
-              Row(children: [
-                Expanded(child: _field(
-                  controller: _birthLat,
-                  label: 'latitude',
-                  isDark: isDark,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return null;
-                    final d = double.tryParse(v);
-                    if (d == null || d < -90 || d > 90) return 'invalid';
-                    return null;
-                  },
-                )),
-                const SizedBox(width: SilatSpacing.md),
-                Expanded(child: _field(
-                  controller: _birthLon,
-                  label: 'longitude',
-                  isDark: isDark,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return null;
-                    final d = double.tryParse(v);
-                    if (d == null || d < -180 || d > 180) return 'invalid';
-                    return null;
-                  },
-                )),
-              ]),
-              _GeoHexDisplay(
-                lat: double.tryParse(_birthLat.text),
-                lon: double.tryParse(_birthLon.text),
-                isDark: isDark,
+              LocationPicker(
+                initial: _birthLoc,
+                onSelected: (r) => setState(() => _birthLoc = r),
               ),
+              if (_birthLoc != null) ...[
+                const SizedBox(height: SilatSpacing.xs),
+                _GeoHexDisplay(
+                  lat: _birthLoc!.lat,
+                  lon: _birthLoc!.lng,
+                  isDark: isDark,
+                ),
+              ],
               const SizedBox(height: SilatSpacing.lg),
 
               // ── Notes ─────────────────────────────────────────────────────

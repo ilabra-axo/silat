@@ -6,6 +6,9 @@ import 'router.dart';
 import 'theme/silat_theme.dart';
 import 'providers/providers.dart';
 
+// Claim deep-link token detected on startup (set before first render)
+String? _pendingClaimToken;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const ProviderScope(child: _AuthInitializer()));
@@ -34,9 +37,21 @@ class _AuthInitializerState extends ConsumerState<_AuthInitializer> {
 
     // ── ABW OAuth callback (web) ──────────────────────────────────────────
     // ABW redirects back to: https://silat.ooo/#/auth?token=X&user_id=Y
+    // Claim links arrive as: https://silat.ooo/#/claim?t=<token>
     // Same fragment pattern as rabble.world
     if (kIsWeb) {
       final fragment = Uri.base.fragment; // everything after #
+
+      // Claim / stewardship deep link: /#/claim?t=<token>[&type=steward]
+      if (fragment.startsWith('/claim')) {
+        final fragUri = Uri.tryParse('https://x$fragment');
+        final claimToken = fragUri?.queryParameters['t'];
+        if (claimToken != null && claimToken.isNotEmpty) {
+          // Preserve the full query string so type=steward passes through
+          _pendingClaimToken = fragUri!.query; // e.g. "t=TOKEN&type=steward"
+        }
+      }
+
       if (fragment.contains('token=')) {
         final fragUri = Uri.tryParse('https://x/$fragment');
         if (fragUri != null) {
@@ -59,6 +74,8 @@ class _AuthInitializerState extends ConsumerState<_AuthInitializer> {
     await auth.initialize();
     if (auth.currentUser != null && mounted) {
       ref.read(currentUserProvider.notifier).state = auth.currentUser;
+      ref.read(syncServiceProvider).sync();
+      ref.read(syncServiceProvider).startPeriodicSync();
     }
 
     if (mounted) setState(() => _ready = true);
@@ -88,13 +105,21 @@ class SilatApp extends ConsumerWidget {
     final isDark  = ref.watch(themeModeProvider);
     final router  = ref.watch(routerProvider);
 
+    // If a claim deep-link was parsed at startup, seed the initial location.
+    // _pendingClaimToken holds the raw query string, e.g. "t=TOKEN&type=steward"
+    final initialLocation = _pendingClaimToken != null
+        ? '/claim?$_pendingClaimToken'
+        : null;
+
     return MaterialApp.router(
       title: 'silat ar rahim',
       debugShowCheckedModeBanner: false,
       theme: silatLight(),
       darkTheme: silatDark(),
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
-      routerConfig: router,
+      routerConfig: initialLocation != null
+          ? ref.watch(routerProviderWithInitial(initialLocation))
+          : router,
     );
   }
 }

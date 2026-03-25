@@ -51,6 +51,16 @@ class Members extends Table {
   TextColumn get phone => text().nullable()();
   TextColumn get whatsapp => text().nullable()();
   BoolColumn get isUrgent => boolean().withDefault(const Constant(false))();
+  // Identity claim
+  TextColumn get claimState =>
+      text().withDefault(const Constant('seeded'))();
+  TextColumn get ownerUserId => text().nullable()();
+  TextColumn get claimToken => text().nullable()();
+  // Stewardship (delegate archivist — parallel to identity claim)
+  TextColumn get stewardshipState =>
+      text().withDefault(const Constant('none'))();
+  TextColumn get stewardUserId => text().nullable()();
+  TextColumn get stewardClaimToken => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -97,7 +107,7 @@ class SilatDatabase extends _$SilatDatabase {
   SilatDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -113,6 +123,16 @@ class SilatDatabase extends _$SilatDatabase {
             await m.drop(relationships);
             await m.create(relationships);
           }
+          if (from < 6) {
+            await m.addColumn(members, members.claimState);
+            await m.addColumn(members, members.ownerUserId);
+            await m.addColumn(members, members.claimToken);
+          }
+          if (from < 7) {
+            await m.addColumn(members, members.stewardshipState);
+            await m.addColumn(members, members.stewardUserId);
+            await m.addColumn(members, members.stewardClaimToken);
+          }
         },
       );
 
@@ -125,6 +145,9 @@ class SilatDatabase extends _$SilatDatabase {
 
   Stream<List<EventRow>> watchUnsynced() =>
       (select(events)..where((e) => e.synced.equals(false))).watch();
+
+  Future<List<EventRow>> getUnsyncedEvents() =>
+      (select(events)..where((e) => e.synced.equals(false))).get();
 
   Future<void> markSynced(List<String> ids) async {
     await (update(events)..where((e) => e.id.isIn(ids)))

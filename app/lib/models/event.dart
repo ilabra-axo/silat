@@ -8,6 +8,11 @@ enum EventType {
   relationshipCreated,
   relationshipDeleted,
   profileClaimed,
+  claimInviteSent,
+  claimRevoked,
+  stewardshipInviteSent,
+  stewardshipClaimed,
+  stewardshipRevoked,
   photoUpdated,
 }
 
@@ -19,6 +24,11 @@ extension EventTypeLabel on EventType {
         EventType.relationshipCreated => 'RelationshipCreated',
         EventType.relationshipDeleted => 'RelationshipDeleted',
         EventType.profileClaimed => 'ProfileClaimed',
+        EventType.claimInviteSent => 'ClaimInviteSent',
+        EventType.claimRevoked => 'ClaimRevoked',
+        EventType.stewardshipInviteSent => 'StewardshipInviteSent',
+        EventType.stewardshipClaimed => 'StewardshipClaimed',
+        EventType.stewardshipRevoked => 'StewardshipRevoked',
         EventType.photoUpdated => 'PhotoUpdated',
       };
 

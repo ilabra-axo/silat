@@ -561,6 +561,46 @@ class $MembersTable extends Members with TableInfo<$MembersTable, MemberRow> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("is_urgent" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _claimStateMeta =
+      const VerificationMeta('claimState');
+  @override
+  late final GeneratedColumn<String> claimState = GeneratedColumn<String>(
+      'claim_state', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('seeded'));
+  static const VerificationMeta _ownerUserIdMeta =
+      const VerificationMeta('ownerUserId');
+  @override
+  late final GeneratedColumn<String> ownerUserId = GeneratedColumn<String>(
+      'owner_user_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _claimTokenMeta =
+      const VerificationMeta('claimToken');
+  @override
+  late final GeneratedColumn<String> claimToken = GeneratedColumn<String>(
+      'claim_token', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _stewardshipStateMeta =
+      const VerificationMeta('stewardshipState');
+  @override
+  late final GeneratedColumn<String> stewardshipState = GeneratedColumn<String>(
+      'stewardship_state', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('none'));
+  static const VerificationMeta _stewardUserIdMeta =
+      const VerificationMeta('stewardUserId');
+  @override
+  late final GeneratedColumn<String> stewardUserId = GeneratedColumn<String>(
+      'steward_user_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _stewardClaimTokenMeta =
+      const VerificationMeta('stewardClaimToken');
+  @override
+  late final GeneratedColumn<String> stewardClaimToken =
+      GeneratedColumn<String>('steward_claim_token', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -594,6 +634,12 @@ class $MembersTable extends Members with TableInfo<$MembersTable, MemberRow> {
         phone,
         whatsapp,
         isUrgent,
+        claimState,
+        ownerUserId,
+        claimToken,
+        stewardshipState,
+        stewardUserId,
+        stewardClaimToken,
         createdAt,
         updatedAt
       ];
@@ -696,6 +742,42 @@ class $MembersTable extends Members with TableInfo<$MembersTable, MemberRow> {
       context.handle(_isUrgentMeta,
           isUrgent.isAcceptableOrUnknown(data['is_urgent']!, _isUrgentMeta));
     }
+    if (data.containsKey('claim_state')) {
+      context.handle(
+          _claimStateMeta,
+          claimState.isAcceptableOrUnknown(
+              data['claim_state']!, _claimStateMeta));
+    }
+    if (data.containsKey('owner_user_id')) {
+      context.handle(
+          _ownerUserIdMeta,
+          ownerUserId.isAcceptableOrUnknown(
+              data['owner_user_id']!, _ownerUserIdMeta));
+    }
+    if (data.containsKey('claim_token')) {
+      context.handle(
+          _claimTokenMeta,
+          claimToken.isAcceptableOrUnknown(
+              data['claim_token']!, _claimTokenMeta));
+    }
+    if (data.containsKey('stewardship_state')) {
+      context.handle(
+          _stewardshipStateMeta,
+          stewardshipState.isAcceptableOrUnknown(
+              data['stewardship_state']!, _stewardshipStateMeta));
+    }
+    if (data.containsKey('steward_user_id')) {
+      context.handle(
+          _stewardUserIdMeta,
+          stewardUserId.isAcceptableOrUnknown(
+              data['steward_user_id']!, _stewardUserIdMeta));
+    }
+    if (data.containsKey('steward_claim_token')) {
+      context.handle(
+          _stewardClaimTokenMeta,
+          stewardClaimToken.isAcceptableOrUnknown(
+              data['steward_claim_token']!, _stewardClaimTokenMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -755,6 +837,18 @@ class $MembersTable extends Members with TableInfo<$MembersTable, MemberRow> {
           .read(DriftSqlType.string, data['${effectivePrefix}whatsapp']),
       isUrgent: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_urgent'])!,
+      claimState: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}claim_state'])!,
+      ownerUserId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}owner_user_id']),
+      claimToken: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}claim_token']),
+      stewardshipState: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}stewardship_state'])!,
+      stewardUserId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}steward_user_id']),
+      stewardClaimToken: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}steward_claim_token']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -788,6 +882,12 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
   final String? phone;
   final String? whatsapp;
   final bool isUrgent;
+  final String claimState;
+  final String? ownerUserId;
+  final String? claimToken;
+  final String stewardshipState;
+  final String? stewardUserId;
+  final String? stewardClaimToken;
   final DateTime createdAt;
   final DateTime updatedAt;
   const MemberRow(
@@ -810,6 +910,12 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
       this.phone,
       this.whatsapp,
       required this.isUrgent,
+      required this.claimState,
+      this.ownerUserId,
+      this.claimToken,
+      required this.stewardshipState,
+      this.stewardUserId,
+      this.stewardClaimToken,
       required this.createdAt,
       required this.updatedAt});
   @override
@@ -864,6 +970,20 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
       map['whatsapp'] = Variable<String>(whatsapp);
     }
     map['is_urgent'] = Variable<bool>(isUrgent);
+    map['claim_state'] = Variable<String>(claimState);
+    if (!nullToAbsent || ownerUserId != null) {
+      map['owner_user_id'] = Variable<String>(ownerUserId);
+    }
+    if (!nullToAbsent || claimToken != null) {
+      map['claim_token'] = Variable<String>(claimToken);
+    }
+    map['stewardship_state'] = Variable<String>(stewardshipState);
+    if (!nullToAbsent || stewardUserId != null) {
+      map['steward_user_id'] = Variable<String>(stewardUserId);
+    }
+    if (!nullToAbsent || stewardClaimToken != null) {
+      map['steward_claim_token'] = Variable<String>(stewardClaimToken);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -918,6 +1038,20 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
           ? const Value.absent()
           : Value(whatsapp),
       isUrgent: Value(isUrgent),
+      claimState: Value(claimState),
+      ownerUserId: ownerUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ownerUserId),
+      claimToken: claimToken == null && nullToAbsent
+          ? const Value.absent()
+          : Value(claimToken),
+      stewardshipState: Value(stewardshipState),
+      stewardUserId: stewardUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stewardUserId),
+      stewardClaimToken: stewardClaimToken == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stewardClaimToken),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -947,6 +1081,13 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
       phone: serializer.fromJson<String?>(json['phone']),
       whatsapp: serializer.fromJson<String?>(json['whatsapp']),
       isUrgent: serializer.fromJson<bool>(json['isUrgent']),
+      claimState: serializer.fromJson<String>(json['claimState']),
+      ownerUserId: serializer.fromJson<String?>(json['ownerUserId']),
+      claimToken: serializer.fromJson<String?>(json['claimToken']),
+      stewardshipState: serializer.fromJson<String>(json['stewardshipState']),
+      stewardUserId: serializer.fromJson<String?>(json['stewardUserId']),
+      stewardClaimToken:
+          serializer.fromJson<String?>(json['stewardClaimToken']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -974,6 +1115,12 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
       'phone': serializer.toJson<String?>(phone),
       'whatsapp': serializer.toJson<String?>(whatsapp),
       'isUrgent': serializer.toJson<bool>(isUrgent),
+      'claimState': serializer.toJson<String>(claimState),
+      'ownerUserId': serializer.toJson<String?>(ownerUserId),
+      'claimToken': serializer.toJson<String?>(claimToken),
+      'stewardshipState': serializer.toJson<String>(stewardshipState),
+      'stewardUserId': serializer.toJson<String?>(stewardUserId),
+      'stewardClaimToken': serializer.toJson<String?>(stewardClaimToken),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -999,6 +1146,12 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
           Value<String?> phone = const Value.absent(),
           Value<String?> whatsapp = const Value.absent(),
           bool? isUrgent,
+          String? claimState,
+          Value<String?> ownerUserId = const Value.absent(),
+          Value<String?> claimToken = const Value.absent(),
+          String? stewardshipState,
+          Value<String?> stewardUserId = const Value.absent(),
+          Value<String?> stewardClaimToken = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt}) =>
       MemberRow(
@@ -1026,6 +1179,15 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
         phone: phone.present ? phone.value : this.phone,
         whatsapp: whatsapp.present ? whatsapp.value : this.whatsapp,
         isUrgent: isUrgent ?? this.isUrgent,
+        claimState: claimState ?? this.claimState,
+        ownerUserId: ownerUserId.present ? ownerUserId.value : this.ownerUserId,
+        claimToken: claimToken.present ? claimToken.value : this.claimToken,
+        stewardshipState: stewardshipState ?? this.stewardshipState,
+        stewardUserId:
+            stewardUserId.present ? stewardUserId.value : this.stewardUserId,
+        stewardClaimToken: stewardClaimToken.present
+            ? stewardClaimToken.value
+            : this.stewardClaimToken,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -1059,6 +1221,21 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
       phone: data.phone.present ? data.phone.value : this.phone,
       whatsapp: data.whatsapp.present ? data.whatsapp.value : this.whatsapp,
       isUrgent: data.isUrgent.present ? data.isUrgent.value : this.isUrgent,
+      claimState:
+          data.claimState.present ? data.claimState.value : this.claimState,
+      ownerUserId:
+          data.ownerUserId.present ? data.ownerUserId.value : this.ownerUserId,
+      claimToken:
+          data.claimToken.present ? data.claimToken.value : this.claimToken,
+      stewardshipState: data.stewardshipState.present
+          ? data.stewardshipState.value
+          : this.stewardshipState,
+      stewardUserId: data.stewardUserId.present
+          ? data.stewardUserId.value
+          : this.stewardUserId,
+      stewardClaimToken: data.stewardClaimToken.present
+          ? data.stewardClaimToken.value
+          : this.stewardClaimToken,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -1086,6 +1263,12 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
           ..write('phone: $phone, ')
           ..write('whatsapp: $whatsapp, ')
           ..write('isUrgent: $isUrgent, ')
+          ..write('claimState: $claimState, ')
+          ..write('ownerUserId: $ownerUserId, ')
+          ..write('claimToken: $claimToken, ')
+          ..write('stewardshipState: $stewardshipState, ')
+          ..write('stewardUserId: $stewardUserId, ')
+          ..write('stewardClaimToken: $stewardClaimToken, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -1113,6 +1296,12 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
         phone,
         whatsapp,
         isUrgent,
+        claimState,
+        ownerUserId,
+        claimToken,
+        stewardshipState,
+        stewardUserId,
+        stewardClaimToken,
         createdAt,
         updatedAt
       ]);
@@ -1139,6 +1328,12 @@ class MemberRow extends DataClass implements Insertable<MemberRow> {
           other.phone == this.phone &&
           other.whatsapp == this.whatsapp &&
           other.isUrgent == this.isUrgent &&
+          other.claimState == this.claimState &&
+          other.ownerUserId == this.ownerUserId &&
+          other.claimToken == this.claimToken &&
+          other.stewardshipState == this.stewardshipState &&
+          other.stewardUserId == this.stewardUserId &&
+          other.stewardClaimToken == this.stewardClaimToken &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -1163,6 +1358,12 @@ class MembersCompanion extends UpdateCompanion<MemberRow> {
   final Value<String?> phone;
   final Value<String?> whatsapp;
   final Value<bool> isUrgent;
+  final Value<String> claimState;
+  final Value<String?> ownerUserId;
+  final Value<String?> claimToken;
+  final Value<String> stewardshipState;
+  final Value<String?> stewardUserId;
+  final Value<String?> stewardClaimToken;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -1186,6 +1387,12 @@ class MembersCompanion extends UpdateCompanion<MemberRow> {
     this.phone = const Value.absent(),
     this.whatsapp = const Value.absent(),
     this.isUrgent = const Value.absent(),
+    this.claimState = const Value.absent(),
+    this.ownerUserId = const Value.absent(),
+    this.claimToken = const Value.absent(),
+    this.stewardshipState = const Value.absent(),
+    this.stewardUserId = const Value.absent(),
+    this.stewardClaimToken = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1210,6 +1417,12 @@ class MembersCompanion extends UpdateCompanion<MemberRow> {
     this.phone = const Value.absent(),
     this.whatsapp = const Value.absent(),
     this.isUrgent = const Value.absent(),
+    this.claimState = const Value.absent(),
+    this.ownerUserId = const Value.absent(),
+    this.claimToken = const Value.absent(),
+    this.stewardshipState = const Value.absent(),
+    this.stewardUserId = const Value.absent(),
+    this.stewardClaimToken = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -1237,6 +1450,12 @@ class MembersCompanion extends UpdateCompanion<MemberRow> {
     Expression<String>? phone,
     Expression<String>? whatsapp,
     Expression<bool>? isUrgent,
+    Expression<String>? claimState,
+    Expression<String>? ownerUserId,
+    Expression<String>? claimToken,
+    Expression<String>? stewardshipState,
+    Expression<String>? stewardUserId,
+    Expression<String>? stewardClaimToken,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1262,6 +1481,12 @@ class MembersCompanion extends UpdateCompanion<MemberRow> {
       if (phone != null) 'phone': phone,
       if (whatsapp != null) 'whatsapp': whatsapp,
       if (isUrgent != null) 'is_urgent': isUrgent,
+      if (claimState != null) 'claim_state': claimState,
+      if (ownerUserId != null) 'owner_user_id': ownerUserId,
+      if (claimToken != null) 'claim_token': claimToken,
+      if (stewardshipState != null) 'stewardship_state': stewardshipState,
+      if (stewardUserId != null) 'steward_user_id': stewardUserId,
+      if (stewardClaimToken != null) 'steward_claim_token': stewardClaimToken,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1288,6 +1513,12 @@ class MembersCompanion extends UpdateCompanion<MemberRow> {
       Value<String?>? phone,
       Value<String?>? whatsapp,
       Value<bool>? isUrgent,
+      Value<String>? claimState,
+      Value<String?>? ownerUserId,
+      Value<String?>? claimToken,
+      Value<String>? stewardshipState,
+      Value<String?>? stewardUserId,
+      Value<String?>? stewardClaimToken,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<int>? rowid}) {
@@ -1311,6 +1542,12 @@ class MembersCompanion extends UpdateCompanion<MemberRow> {
       phone: phone ?? this.phone,
       whatsapp: whatsapp ?? this.whatsapp,
       isUrgent: isUrgent ?? this.isUrgent,
+      claimState: claimState ?? this.claimState,
+      ownerUserId: ownerUserId ?? this.ownerUserId,
+      claimToken: claimToken ?? this.claimToken,
+      stewardshipState: stewardshipState ?? this.stewardshipState,
+      stewardUserId: stewardUserId ?? this.stewardUserId,
+      stewardClaimToken: stewardClaimToken ?? this.stewardClaimToken,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1377,6 +1614,24 @@ class MembersCompanion extends UpdateCompanion<MemberRow> {
     if (isUrgent.present) {
       map['is_urgent'] = Variable<bool>(isUrgent.value);
     }
+    if (claimState.present) {
+      map['claim_state'] = Variable<String>(claimState.value);
+    }
+    if (ownerUserId.present) {
+      map['owner_user_id'] = Variable<String>(ownerUserId.value);
+    }
+    if (claimToken.present) {
+      map['claim_token'] = Variable<String>(claimToken.value);
+    }
+    if (stewardshipState.present) {
+      map['stewardship_state'] = Variable<String>(stewardshipState.value);
+    }
+    if (stewardUserId.present) {
+      map['steward_user_id'] = Variable<String>(stewardUserId.value);
+    }
+    if (stewardClaimToken.present) {
+      map['steward_claim_token'] = Variable<String>(stewardClaimToken.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1411,6 +1666,12 @@ class MembersCompanion extends UpdateCompanion<MemberRow> {
           ..write('phone: $phone, ')
           ..write('whatsapp: $whatsapp, ')
           ..write('isUrgent: $isUrgent, ')
+          ..write('claimState: $claimState, ')
+          ..write('ownerUserId: $ownerUserId, ')
+          ..write('claimToken: $claimToken, ')
+          ..write('stewardshipState: $stewardshipState, ')
+          ..write('stewardUserId: $stewardUserId, ')
+          ..write('stewardClaimToken: $stewardClaimToken, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -2489,6 +2750,12 @@ typedef $$MembersTableCreateCompanionBuilder = MembersCompanion Function({
   Value<String?> phone,
   Value<String?> whatsapp,
   Value<bool> isUrgent,
+  Value<String> claimState,
+  Value<String?> ownerUserId,
+  Value<String?> claimToken,
+  Value<String> stewardshipState,
+  Value<String?> stewardUserId,
+  Value<String?> stewardClaimToken,
   required DateTime createdAt,
   required DateTime updatedAt,
   Value<int> rowid,
@@ -2513,6 +2780,12 @@ typedef $$MembersTableUpdateCompanionBuilder = MembersCompanion Function({
   Value<String?> phone,
   Value<String?> whatsapp,
   Value<bool> isUrgent,
+  Value<String> claimState,
+  Value<String?> ownerUserId,
+  Value<String?> claimToken,
+  Value<String> stewardshipState,
+  Value<String?> stewardUserId,
+  Value<String?> stewardClaimToken,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -2585,6 +2858,26 @@ class $$MembersTableFilterComposer
 
   ColumnFilters<bool> get isUrgent => $composableBuilder(
       column: $table.isUrgent, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get claimState => $composableBuilder(
+      column: $table.claimState, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get ownerUserId => $composableBuilder(
+      column: $table.ownerUserId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get claimToken => $composableBuilder(
+      column: $table.claimToken, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get stewardshipState => $composableBuilder(
+      column: $table.stewardshipState,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get stewardUserId => $composableBuilder(
+      column: $table.stewardUserId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get stewardClaimToken => $composableBuilder(
+      column: $table.stewardClaimToken,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -2663,6 +2956,27 @@ class $$MembersTableOrderingComposer
   ColumnOrderings<bool> get isUrgent => $composableBuilder(
       column: $table.isUrgent, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get claimState => $composableBuilder(
+      column: $table.claimState, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get ownerUserId => $composableBuilder(
+      column: $table.ownerUserId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get claimToken => $composableBuilder(
+      column: $table.claimToken, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get stewardshipState => $composableBuilder(
+      column: $table.stewardshipState,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get stewardUserId => $composableBuilder(
+      column: $table.stewardUserId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get stewardClaimToken => $composableBuilder(
+      column: $table.stewardClaimToken,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -2736,6 +3050,24 @@ class $$MembersTableAnnotationComposer
   GeneratedColumn<bool> get isUrgent =>
       $composableBuilder(column: $table.isUrgent, builder: (column) => column);
 
+  GeneratedColumn<String> get claimState => $composableBuilder(
+      column: $table.claimState, builder: (column) => column);
+
+  GeneratedColumn<String> get ownerUserId => $composableBuilder(
+      column: $table.ownerUserId, builder: (column) => column);
+
+  GeneratedColumn<String> get claimToken => $composableBuilder(
+      column: $table.claimToken, builder: (column) => column);
+
+  GeneratedColumn<String> get stewardshipState => $composableBuilder(
+      column: $table.stewardshipState, builder: (column) => column);
+
+  GeneratedColumn<String> get stewardUserId => $composableBuilder(
+      column: $table.stewardUserId, builder: (column) => column);
+
+  GeneratedColumn<String> get stewardClaimToken => $composableBuilder(
+      column: $table.stewardClaimToken, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -2785,6 +3117,12 @@ class $$MembersTableTableManager extends RootTableManager<
             Value<String?> phone = const Value.absent(),
             Value<String?> whatsapp = const Value.absent(),
             Value<bool> isUrgent = const Value.absent(),
+            Value<String> claimState = const Value.absent(),
+            Value<String?> ownerUserId = const Value.absent(),
+            Value<String?> claimToken = const Value.absent(),
+            Value<String> stewardshipState = const Value.absent(),
+            Value<String?> stewardUserId = const Value.absent(),
+            Value<String?> stewardClaimToken = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -2809,6 +3147,12 @@ class $$MembersTableTableManager extends RootTableManager<
             phone: phone,
             whatsapp: whatsapp,
             isUrgent: isUrgent,
+            claimState: claimState,
+            ownerUserId: ownerUserId,
+            claimToken: claimToken,
+            stewardshipState: stewardshipState,
+            stewardUserId: stewardUserId,
+            stewardClaimToken: stewardClaimToken,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -2833,6 +3177,12 @@ class $$MembersTableTableManager extends RootTableManager<
             Value<String?> phone = const Value.absent(),
             Value<String?> whatsapp = const Value.absent(),
             Value<bool> isUrgent = const Value.absent(),
+            Value<String> claimState = const Value.absent(),
+            Value<String?> ownerUserId = const Value.absent(),
+            Value<String?> claimToken = const Value.absent(),
+            Value<String> stewardshipState = const Value.absent(),
+            Value<String?> stewardUserId = const Value.absent(),
+            Value<String?> stewardClaimToken = const Value.absent(),
             required DateTime createdAt,
             required DateTime updatedAt,
             Value<int> rowid = const Value.absent(),
@@ -2857,6 +3207,12 @@ class $$MembersTableTableManager extends RootTableManager<
             phone: phone,
             whatsapp: whatsapp,
             isUrgent: isUrgent,
+            claimState: claimState,
+            ownerUserId: ownerUserId,
+            claimToken: claimToken,
+            stewardshipState: stewardshipState,
+            stewardUserId: stewardUserId,
+            stewardClaimToken: stewardClaimToken,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,

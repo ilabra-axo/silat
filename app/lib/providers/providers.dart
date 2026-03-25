@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/database.dart';
 import '../services/auth_service.dart';
 import '../services/event_store.dart';
+import '../services/sync_service.dart';
 import '../services/kinship_engine.dart';
 import '../models/member.dart';
 import '../models/relationship.dart';
@@ -31,6 +32,13 @@ final eventStoreProvider = Provider<EventStore>((ref) {
 });
 
 final kinshipEngineProvider = Provider<KinshipEngine>((_) => KinshipEngine());
+
+final syncServiceProvider = Provider<SyncService>((ref) {
+  return SyncService(
+    ref.read(databaseProvider),
+    ref.read(authServiceProvider),
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Auth state
@@ -257,6 +265,13 @@ Member _rowToMember(dynamic row) => Member(
       phone: row.phone as String?,
       whatsapp: row.whatsapp as String?,
       isUrgent: (row.isUrgent as bool?) ?? false,
+      claimState: ClaimStateLabel.fromCode(row.claimState as String?),
+      ownerUserId: row.ownerUserId as String?,
+      claimToken: row.claimToken as String?,
+      stewardshipState:
+          StewardshipStateLabel.fromCode(row.stewardshipState as String?),
+      stewardUserId: row.stewardUserId as String?,
+      stewardClaimToken: row.stewardClaimToken as String?,
       createdAt: row.createdAt as DateTime,
       updatedAt: row.updatedAt as DateTime,
     );

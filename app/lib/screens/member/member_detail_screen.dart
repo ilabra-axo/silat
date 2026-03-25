@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -266,6 +267,66 @@ class MemberDetailScreen extends ConsumerWidget {
                     ),
                   );
                 }),
+
+                const SizedBox(height: SilatSpacing.lg),
+
+                // Claim / stewardship status
+                _ClaimSection(
+                  member: member,
+                  isDark: isDark,
+                  onSendIdentityInvite: () async {
+                    final store = ref.read(eventStoreProvider);
+                    final user = ref.read(currentUserProvider)!;
+                    final updated = await store.sendClaimInvite(
+                      actorId: user.id,
+                      member: member,
+                    );
+                    final link =
+                        'https://silat.ooo/#/claim?t=${updated.claimToken}';
+                    await Clipboard.setData(ClipboardData(text: link));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Identity invite link copied'),
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    }
+                  },
+                  onRevokeIdentity:
+                      member.claimState == ClaimState.claimPending
+                          ? () async {
+                              final store = ref.read(eventStoreProvider);
+                              final user = ref.read(currentUserProvider)!;
+                              await store.revokeClaimInvite(
+                                  actorId: user.id, member: member);
+                            }
+                          : null,
+                  onSendStewardInvite: () async {
+                    final store = ref.read(eventStoreProvider);
+                    final user = ref.read(currentUserProvider)!;
+                    final updated = await store.sendStewardshipInvite(
+                      actorId: user.id,
+                      member: member,
+                    );
+                    final link =
+                        'https://silat.ooo/#/claim?t=${updated.stewardClaimToken}&type=steward';
+                    await Clipboard.setData(ClipboardData(text: link));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Stewardship invite link copied'),
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    }
+                  },
+                  onRevokeSteward:
+                      member.stewardshipState != StewardshipState.none
+                          ? () async {
+                              final store = ref.read(eventStoreProvider);
+                              final user = ref.read(currentUserProvider)!;
+                              await store.revokeStewardship(
+                                  actorId: user.id, member: member);
+                            }
+                          : null,
+                ),
 
                 const SizedBox(height: SilatSpacing.lg),
 
@@ -909,4 +970,240 @@ void _showAddLifeEvent(
       ),
     ),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Claim section — identity track + stewardship track side by side
+// ---------------------------------------------------------------------------
+class _ClaimSection extends StatelessWidget {
+  const _ClaimSection({
+    required this.member,
+    required this.isDark,
+    required this.onSendIdentityInvite,
+    this.onRevokeIdentity,
+    required this.onSendStewardInvite,
+    this.onRevokeSteward,
+  });
+
+  final Member member;
+  final bool isDark;
+  final VoidCallback onSendIdentityInvite;
+  final VoidCallback? onRevokeIdentity;
+  final VoidCallback onSendStewardInvite;
+  final VoidCallback? onRevokeSteward;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Section(
+      title: 'account',
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _IdentityTrack(
+            member: member,
+            isDark: isDark,
+            onSendInvite: onSendIdentityInvite,
+            onRevoke: onRevokeIdentity,
+          ),
+          const SizedBox(height: SilatSpacing.md),
+          Divider(color: isDark ? SilatColors.bg3 : SilatColors.lbg3,
+              height: 1),
+          const SizedBox(height: SilatSpacing.md),
+          _StewardshipTrack(
+            member: member,
+            isDark: isDark,
+            onSendInvite: onSendStewardInvite,
+            onRevoke: onRevokeSteward,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IdentityTrack extends StatelessWidget {
+  const _IdentityTrack({
+    required this.member,
+    required this.isDark,
+    required this.onSendInvite,
+    this.onRevoke,
+  });
+
+  final Member member;
+  final bool isDark;
+  final VoidCallback onSendInvite;
+  final VoidCallback? onRevoke;
+
+  @override
+  Widget build(BuildContext context) {
+    final isClaimed = member.isClaimed;
+    final isPending = member.claimState == ClaimState.claimPending;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(
+            isClaimed
+                ? Icons.verified_outlined
+                : isPending
+                    ? Icons.hourglass_top_outlined
+                    : Icons.person_add_outlined,
+            size: 13,
+            color: isClaimed
+                ? SilatColors.success
+                : isPending
+                    ? SilatColors.slate
+                    : SilatColors.terracotta,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isClaimed
+                ? 'identity claimed'
+                : isPending
+                    ? 'identity invite sent'
+                    : 'identity unclaimed',
+            style: SilatTypography.label(dark: isDark).copyWith(
+              fontWeight: FontWeight.w600,
+              color: isClaimed
+                  ? SilatColors.success
+                  : isPending
+                      ? SilatColors.slate
+                      : SilatColors.fg2,
+            ),
+          ),
+        ]),
+        const SizedBox(height: SilatSpacing.xs),
+        Text(
+          isClaimed
+              ? '${member.firstName} has claimed their own profile.'
+              : isPending
+                  ? 'Waiting for ${member.firstName} to sign in and claim.'
+                  : 'Send ${member.firstName} a link to claim their own identity.',
+          style: SilatTypography.label(dark: isDark),
+        ),
+        if (!isClaimed) ...[
+          const SizedBox(height: SilatSpacing.sm),
+          Row(children: [
+            OutlinedButton.icon(
+              onPressed: onSendInvite,
+              icon: const Icon(Icons.link, size: 13),
+              label: Text(isPending ? 'copy new link' : 'send identity link'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: SilatColors.terracotta,
+                side: BorderSide(color: SilatColors.terracotta),
+                textStyle: SilatTypography.label(dark: isDark),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: SilatSpacing.md, vertical: SilatSpacing.xs),
+              ),
+            ),
+            if (onRevoke != null) ...[
+              const SizedBox(width: SilatSpacing.sm),
+              TextButton(
+                onPressed: onRevoke,
+                child: Text('revoke',
+                    style: SilatTypography.label(dark: isDark)
+                        .copyWith(color: SilatColors.fg3)),
+              ),
+            ],
+          ]),
+        ],
+      ],
+    );
+  }
+}
+
+class _StewardshipTrack extends StatelessWidget {
+  const _StewardshipTrack({
+    required this.member,
+    required this.isDark,
+    required this.onSendInvite,
+    this.onRevoke,
+  });
+
+  final Member member;
+  final bool isDark;
+  final VoidCallback onSendInvite;
+  final VoidCallback? onRevoke;
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = member.hasSteward;
+    final isPending =
+        member.stewardshipState == StewardshipState.pending;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(
+            isActive
+                ? Icons.manage_accounts_outlined
+                : isPending
+                    ? Icons.hourglass_top_outlined
+                    : Icons.person_search_outlined,
+            size: 13,
+            color: isActive
+                ? SilatColors.success
+                : isPending
+                    ? SilatColors.slate
+                    : SilatColors.fg3,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isActive
+                ? 'steward active'
+                : isPending
+                    ? 'steward invite sent'
+                    : 'no steward',
+            style: SilatTypography.label(dark: isDark).copyWith(
+              fontWeight: FontWeight.w600,
+              color: isActive
+                  ? SilatColors.success
+                  : isPending
+                      ? SilatColors.slate
+                      : SilatColors.fg3,
+            ),
+          ),
+        ]),
+        const SizedBox(height: SilatSpacing.xs),
+        Text(
+          isActive
+              ? 'A delegate archivist is maintaining this profile. '
+                '${member.firstName} can still claim their identity.'
+              : isPending
+                  ? 'Waiting for the delegate archivist to accept.'
+                  : 'Delegate a trusted archivist to maintain this profile.',
+          style: SilatTypography.label(dark: isDark),
+        ),
+        const SizedBox(height: SilatSpacing.sm),
+        Row(children: [
+          OutlinedButton.icon(
+            onPressed: onSendInvite,
+            icon: const Icon(Icons.group_add_outlined, size: 13),
+            label: Text(
+              isActive || isPending ? 'replace steward' : 'delegate steward',
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: SilatColors.slate,
+              side: BorderSide(color: SilatColors.slate),
+              textStyle: SilatTypography.label(dark: isDark),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: SilatSpacing.md, vertical: SilatSpacing.xs),
+            ),
+          ),
+          if (onRevoke != null) ...[
+            const SizedBox(width: SilatSpacing.sm),
+            TextButton(
+              onPressed: onRevoke,
+              child: Text('revoke',
+                  style: SilatTypography.label(dark: isDark)
+                      .copyWith(color: SilatColors.fg3)),
+            ),
+          ],
+        ]),
+      ],
+    );
+  }
 }

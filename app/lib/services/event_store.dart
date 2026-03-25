@@ -288,6 +288,12 @@ class EventStore {
         phone: Value(member.phone),
         whatsapp: Value(member.whatsapp),
         isUrgent: Value(member.isUrgent),
+        claimState: Value(member.claimState.code),
+        ownerUserId: Value(member.ownerUserId),
+        claimToken: Value(member.claimToken),
+        stewardshipState: Value(member.stewardshipState.code),
+        stewardUserId: Value(member.stewardUserId),
+        stewardClaimToken: Value(member.stewardClaimToken),
         createdAt: Value(member.createdAt),
         updatedAt: Value(member.updatedAt),
       );
@@ -345,6 +351,189 @@ class EventStore {
     );
 
     await _db.upsertRelationship(_relToCompanion(updated));
+    return updated;
+  }
+
+  // -------------------------------------------------------------------------
+  // Claim commands
+  // -------------------------------------------------------------------------
+
+  /// Generates a one-time claim token and records a ClaimInviteSent event.
+  /// Returns the updated member (with claimToken set) whose invite link can
+  /// be shared as: https://silat.ooo/#/claim?t=<token>
+  Future<m.Member> sendClaimInvite({
+    required String actorId,
+    required m.Member member,
+  }) async {
+    final token = const Uuid().v4();
+    final now = DateTime.now().toUtc();
+    final updated = member.copyWith(
+      claimState: m.ClaimState.claimPending,
+      claimToken: token,
+      updatedAt: now,
+    );
+
+    await _append(
+      streamId: member.id,
+      streamType: StreamType.member,
+      eventType: EventType.claimInviteSent,
+      payload: {'id': member.id, 'token': token, 'invited_by': actorId},
+      actorId: actorId,
+      occurredAt: now,
+    );
+
+    await _db.upsertMember(_memberToCompanion(updated));
+    return updated;
+  }
+
+  /// Called when a user taps a claim link and has authenticated.
+  Future<m.Member> claimProfile({
+    required String actorId,
+    required m.Member member,
+    required String token,
+  }) async {
+    if (member.claimToken != token) {
+      throw ArgumentError('Invalid claim token');
+    }
+    final now = DateTime.now().toUtc();
+    final updated = member.copyWith(
+      claimState: m.ClaimState.claimed,
+      ownerUserId: actorId,
+      clearClaimToken: true,
+      updatedAt: now,
+    );
+
+    await _append(
+      streamId: member.id,
+      streamType: StreamType.member,
+      eventType: EventType.profileClaimed,
+      payload: {'id': member.id, 'claimed_by': actorId, 'token': token},
+      actorId: actorId,
+      occurredAt: now,
+    );
+
+    await _db.upsertMember(_memberToCompanion(updated));
+    return updated;
+  }
+
+  // -------------------------------------------------------------------------
+  // Stewardship commands (delegate archivist — parallel to identity claim)
+  // -------------------------------------------------------------------------
+
+  /// Sends a stewardship invite to another archivist who knows this branch.
+  /// The invitee clicks https://silat.ooo/#/claim?t=<token>&type=steward
+  /// Stewardship does NOT block the real person from later claiming identity.
+  Future<m.Member> sendStewardshipInvite({
+    required String actorId,
+    required m.Member member,
+  }) async {
+    final token = const Uuid().v4();
+    final now = DateTime.now().toUtc();
+    final updated = member.copyWith(
+      stewardshipState: m.StewardshipState.pending,
+      stewardClaimToken: token,
+      updatedAt: now,
+    );
+
+    await _append(
+      streamId: member.id,
+      streamType: StreamType.member,
+      eventType: EventType.stewardshipInviteSent,
+      payload: {
+        'id': member.id,
+        'steward_token': token,
+        'invited_by': actorId,
+      },
+      actorId: actorId,
+      occurredAt: now,
+    );
+
+    await _db.upsertMember(_memberToCompanion(updated));
+    return updated;
+  }
+
+  /// Called when an archivist accepts a stewardship invite.
+  Future<m.Member> claimStewardship({
+    required String actorId,
+    required m.Member member,
+    required String token,
+  }) async {
+    if (member.stewardClaimToken != token) {
+      throw ArgumentError('Invalid stewardship token');
+    }
+    final now = DateTime.now().toUtc();
+    final updated = member.copyWith(
+      stewardshipState: m.StewardshipState.active,
+      stewardUserId: actorId,
+      clearStewardClaimToken: true,
+      updatedAt: now,
+    );
+
+    await _append(
+      streamId: member.id,
+      streamType: StreamType.member,
+      eventType: EventType.stewardshipClaimed,
+      payload: {
+        'id': member.id,
+        'steward_user_id': actorId,
+        'token': token,
+      },
+      actorId: actorId,
+      occurredAt: now,
+    );
+
+    await _db.upsertMember(_memberToCompanion(updated));
+    return updated;
+  }
+
+  /// Revokes an active stewardship (either party can revoke).
+  Future<m.Member> revokeStewardship({
+    required String actorId,
+    required m.Member member,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final updated = member.copyWith(
+      stewardshipState: m.StewardshipState.none,
+      clearStewardUserId: true,
+      clearStewardClaimToken: true,
+      updatedAt: now,
+    );
+
+    await _append(
+      streamId: member.id,
+      streamType: StreamType.member,
+      eventType: EventType.stewardshipRevoked,
+      payload: {'id': member.id, 'revoked_by': actorId},
+      actorId: actorId,
+      occurredAt: now,
+    );
+
+    await _db.upsertMember(_memberToCompanion(updated));
+    return updated;
+  }
+
+  /// Archivist revokes a pending claim invite (e.g. wrong person).
+  Future<m.Member> revokeClaimInvite({
+    required String actorId,
+    required m.Member member,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final updated = member.copyWith(
+      claimState: m.ClaimState.seeded,
+      clearClaimToken: true,
+      updatedAt: now,
+    );
+
+    await _append(
+      streamId: member.id,
+      streamType: StreamType.member,
+      eventType: EventType.claimRevoked,
+      payload: {'id': member.id, 'revoked_by': actorId},
+      actorId: actorId,
+      occurredAt: now,
+    );
+
+    await _db.upsertMember(_memberToCompanion(updated));
     return updated;
   }
 
