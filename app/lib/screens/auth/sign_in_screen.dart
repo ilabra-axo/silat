@@ -57,7 +57,7 @@ class SignInScreen extends ConsumerWidget {
 
               const SizedBox(height: SilatSpacing.md),
               Text(
-                'A Google account is required for cloud sync.\nAll data is stored locally on your device.',
+                'Sign in to access your family network.\nData is shared securely across devices.',
                 style: SilatTypography.label(),
                 textAlign: TextAlign.center,
               ),

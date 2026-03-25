@@ -113,7 +113,10 @@ class _MemberListScreenState extends ConsumerState<MemberListScreen> {
                 );
               }
 
-              return ListView.separated(
+              return RefreshIndicator(
+                color: SilatColors.terracotta,
+                onRefresh: () async => ref.invalidate(familyDataProvider),
+                child: ListView.separated(
                 padding: const EdgeInsets.only(
                   top: SilatSpacing.sm,
                   bottom: 100, // clearance for FAB
@@ -140,7 +143,7 @@ class _MemberListScreenState extends ConsumerState<MemberListScreen> {
                     },
                   );
                 },
-              );
+              ));  // close RefreshIndicator
             },
           ),
 

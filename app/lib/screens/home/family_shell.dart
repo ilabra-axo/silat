@@ -20,10 +20,10 @@ class FamilyShell extends ConsumerWidget {
           toolbarHeight: 0, // suppress default title bar - each sub-screen has its own
           bottom: TabBar(
             tabs: const [
-              Tab(text: 'list'),
-              Tab(text: 'graph'),
-              Tab(text: 'geo'),
-              Tab(text: 'reach'),
+              Tab(icon: Icon(Icons.format_list_bulleted, size: 16), text: 'list'),
+              Tab(icon: Icon(Icons.account_tree_outlined, size: 16), text: 'graph'),
+              Tab(icon: Icon(Icons.map_outlined, size: 16), text: 'geo'),
+              Tab(icon: Icon(Icons.grain_outlined, size: 16), text: 'reach'),
             ],
             labelStyle: SilatTypography.label(dark: isDark)
                 .copyWith(letterSpacing: 1.2),
@@ -31,6 +31,7 @@ class FamilyShell extends ConsumerWidget {
             unselectedLabelColor: SilatColors.fg3,
             indicatorColor: SilatColors.terracotta,
             indicatorSize: TabBarIndicatorSize.label,
+            iconSize: 16,
           ),
         ),
         body: const TabBarView(

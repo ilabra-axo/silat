@@ -61,6 +61,10 @@ class _FamilyData {
 class _FamilyDataNotifier extends AsyncNotifier<_FamilyData> {
   @override
   Future<_FamilyData> build() async {
+    // Keep data alive across navigation — avoids re-fetch on every tab switch.
+    // Invalidated explicitly after every write via onDataChanged.
+    ref.keepAlive();
+
     final user = ref.watch(currentUserProvider);
     if (user == null) return const _FamilyData(members: [], relationships: []);
     final result = await ref.read(apiServiceProvider).fetchAll();
