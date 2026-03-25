@@ -66,9 +66,10 @@ async function handlePost(req: VercelRequest, res: VercelResponse, userId: strin
   const caption = parts["caption"]?.text ?? null;
   const filePart = parts["file"];
 
-  if (!memberId || !filePart) {
+  if (!memberId || !filePart || !filePart.data) {
     return res.status(400).json({ error: "member_id and file required" });
   }
+  const fileData: Buffer = filePart.data;
 
   // Verify user has access to this member's tree
   const trees = await getUserTrees(userId);
@@ -86,7 +87,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse, userId: strin
   const mimeType = filePart.contentType ?? "application/octet-stream";
 
   // Upload to Vercel Blob
-  const blob = await put(`silat/${treeId}/${memberId}/${id}-${filename}`, filePart.data, {
+  const blob = await put(`silat/${treeId}/${memberId}/${id}-${filename}`, fileData, {
     access: "public",
     contentType: mimeType,
     addRandomSuffix: false,
@@ -95,7 +96,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse, userId: strin
   await sql.query(
     `INSERT INTO attachments (id, member_id, tree_id, blob_url, filename, mime_type, byte_size, caption, created_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [id, memberId, treeId, blob.url, filename, mimeType, filePart.data.length, caption, userId]
+    [id, memberId, treeId, blob.url, filename, mimeType, fileData.length, caption, userId]
   );
 
   const { rows } = await sql.query(
