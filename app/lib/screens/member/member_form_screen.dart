@@ -195,6 +195,14 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
         );
         if (mounted) context.pop();
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: SilatColors.error,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -411,10 +419,20 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
       ),
     );
     if (confirmed == true && mounted) {
-      final store = ref.read(eventStoreProvider);
-      final user = ref.read(currentUserProvider)!;
-      await store.deleteMember(actorId: user.id, memberId: _existing!.id);
-      if (mounted) context.go('/home');
+      try {
+        final store = ref.read(eventStoreProvider);
+        final user = ref.read(currentUserProvider)!;
+        await store.deleteMember(actorId: user.id, memberId: _existing!.id);
+        if (mounted) context.go('/home');
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Delete failed: $e'),
+            backgroundColor: SilatColors.error,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+      }
     }
   }
 }
