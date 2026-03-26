@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../theme/silat_theme.dart';
 import '../../providers/providers.dart';
@@ -41,7 +42,14 @@ class _ClaimScreenState extends ConsumerState<ClaimScreen> {
   Future<void> _applyClaim() async {
     final user = ref.read(currentUserProvider);
     if (user == null) {
-      _fail('Please sign in first to accept this invite.');
+      // Persist the token so it survives the OAuth page reload, then send the
+      // user to sign-in. main.dart restores the token after the callback.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pending_claim_token', widget.token);
+      if (widget.type != null) {
+        await prefs.setString('pending_claim_type', widget.type!);
+      }
+      if (mounted) context.go('/sign-in');
       return;
     }
 

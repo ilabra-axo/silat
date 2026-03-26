@@ -64,6 +64,16 @@ class _AuthInitializerState extends ConsumerState<_AuthInitializer> {
             );
             if (user != null && mounted) {
               ref.read(currentUserProvider.notifier).state = user;
+              // Restore a claim token that was saved before the OAuth redirect
+              final prefs = await SharedPreferences.getInstance();
+              final pendingToken = prefs.getString('pending_claim_token');
+              if (pendingToken != null) {
+                final pendingType = prefs.getString('pending_claim_type');
+                await prefs.remove('pending_claim_token');
+                await prefs.remove('pending_claim_type');
+                _pendingClaimToken = 't=$pendingToken'
+                    '${pendingType != null ? '&type=$pendingType' : ''}';
+              }
             }
           }
         }

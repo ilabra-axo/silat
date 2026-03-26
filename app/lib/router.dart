@@ -41,8 +41,10 @@ GoRouter _buildRouter(Ref ref, {String? initialLocation}) {
       final isOnAuth = loc == '/sign-in';
       final isOnClaim = loc == '/claim';
 
-      if (!isSignedIn && !isOnAuth) return '/sign-in';
-      if (isSignedIn && isOnAuth) return isOnClaim ? null : '/home';
+      // /claim is accessible while unauthenticated — ClaimScreen handles the
+      // sign-in redirect itself so the token survives the OAuth round-trip.
+      if (!isSignedIn && !isOnAuth && !isOnClaim) return '/sign-in';
+      if (isSignedIn && isOnAuth) return '/home';
       return null;
     },
     routes: [
