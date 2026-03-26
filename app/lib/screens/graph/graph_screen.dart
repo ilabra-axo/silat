@@ -37,6 +37,16 @@ class _GraphScreenState extends ConsumerState<GraphScreen> {
   final _treeLayout = GenLaneLayout();
   final _arcLayout = ArcLayout();
 
+  // Transformation controller for tree view — used to fit content on first show.
+  final _treeController = TransformationController();
+  bool _treeTransformSet = false;
+
+  @override
+  void dispose() {
+    _treeController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final membersAsync = ref.watch(membersProvider);
@@ -48,7 +58,12 @@ class _GraphScreenState extends ConsumerState<GraphScreen> {
       children: [
         _ModeBar(
           mode: _mode,
-          onChanged: (m) => setState(() => _mode = m),
+          onChanged: (m) {
+            setState(() {
+              _mode = m;
+              _treeTransformSet = false; // re-fit on next tree render
+            });
+          },
         ),
         Expanded(
           child: membersAsync.when(
@@ -162,14 +177,26 @@ class _GraphScreenState extends ConsumerState<GraphScreen> {
   ) {
     _treeLayout.compute(members: members, rels: rels, egoId: egoId);
 
-    final canvasW =
-        math.max(_treeLayout.canvasWidth, constraints.maxWidth.toDouble());
-    final canvasH =
-        math.max(_treeLayout.canvasHeight, constraints.maxHeight.toDouble());
+    final canvasW = _treeLayout.canvasWidth;
+    final canvasH = _treeLayout.canvasHeight;
+    final vpW = constraints.maxWidth;
+    final vpH = constraints.maxHeight;
+
+    // Fit the whole tree into view on first render (or after mode switch).
+    if (!_treeTransformSet && canvasW > 0 && canvasH > 0) {
+      _treeTransformSet = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _treeController.value = _fitMatrix(canvasW, canvasH, vpW, vpH);
+        }
+      });
+    }
 
     return InteractiveViewer(
-      boundaryMargin: const EdgeInsets.all(200),
-      minScale: 0.2,
+      transformationController: _treeController,
+      constrained: false,
+      boundaryMargin: const EdgeInsets.all(80),
+      minScale: 0.15,
       maxScale: 4.0,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -208,14 +235,17 @@ class _GraphScreenState extends ConsumerState<GraphScreen> {
       members: members,
       rels: rels,
       egoId: egoId,
+      viewWidth: constraints.maxWidth,
       viewHeight: constraints.maxHeight,
     );
 
-    final canvasW =
-        math.max(_arcLayout.canvasWidth, constraints.maxWidth.toDouble());
+    // Canvas width = viewport width (no horizontal overflow).
+    // Canvas height may exceed viewport — user pans vertically.
+    final canvasH = _arcLayout.canvasHeight;
 
     return InteractiveViewer(
-      boundaryMargin: const EdgeInsets.symmetric(horizontal: 400, vertical: 80),
+      constrained: false,
+      boundaryMargin: const EdgeInsets.symmetric(horizontal: 0, vertical: 80),
       minScale: 0.3,
       maxScale: 4.0,
       child: GestureDetector(
@@ -227,7 +257,7 @@ class _GraphScreenState extends ConsumerState<GraphScreen> {
         onLongPressStart: (d) =>
             _setEgo(d.localPosition, _arcLayout.hitTest, members),
         child: CustomPaint(
-          size: Size(canvasW, constraints.maxHeight),
+          size: Size(constraints.maxWidth, canvasH),
           painter: ArcDiagramPainter(
             layout: _arcLayout,
             members: members,
@@ -243,6 +273,20 @@ class _GraphScreenState extends ConsumerState<GraphScreen> {
   // ---------------------------------------------------------------------------
   // Shared helpers
   // ---------------------------------------------------------------------------
+
+  /// Returns a Matrix4 that scales and centres [contentW × contentH]
+  /// to fit inside [vpW × vpH] at 90% of available space.
+  static Matrix4 _fitMatrix(
+      double contentW, double contentH, double vpW, double vpH) {
+    final scale =
+        math.min(vpW / contentW, vpH / contentH).clamp(0.1, 1.0) * 0.90;
+    final tx = (vpW - contentW * scale) / 2;
+    final ty = (vpH - contentH * scale) / 2;
+    // viewport = Translate(tx,ty) * Scale(s,s) * scene
+    return Matrix4.identity()
+      ..translate(tx, ty, 0.0)
+      ..scale(scale, scale, 1.0);
+  }
 
   void _setEgo(Offset pos, String? Function(Offset) hitTest,
       List<Member> members) {

@@ -24,9 +24,8 @@ class _WebNode {
 
 class EgoWebLayout {
   List<_WebNode> _nodes = [];
-
-  // Ring radii indexed by degree (0 = ego at centre)
-  static const _radii = [0.0, 88.0, 162.0, 228.0, 288.0];
+  // Radii computed dynamically in compute() to fit the viewport.
+  List<double> _radii = [0.0, 88.0, 162.0, 228.0, 288.0];
 
   void compute({
     required List<Member> members,
@@ -38,6 +37,10 @@ class EgoWebLayout {
   }) {
     _nodes = [];
     if (egoId == null || members.isEmpty) return;
+
+    // Scale rings so the outermost always sits inside the viewport with margin.
+    final maxR = math.min(width, height) * 0.42;
+    _radii = [0.0, maxR * 0.29, maxR * 0.55, maxR * 0.78, maxR];
 
     final cx = width / 2;
     final cy = height / 2;
@@ -138,7 +141,7 @@ class EgoWebPainter extends CustomPainter {
 
     const ringLabels = ['', '1st', '2nd', '3rd', '4th+'];
     for (int ring = 1; ring <= 4; ring++) {
-      final r = EgoWebLayout._radii[ring];
+      final r = layout._radii[ring];
       canvas.drawCircle(center, r, ringPaint);
       _drawText(
         canvas,

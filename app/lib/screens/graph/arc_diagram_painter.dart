@@ -1,8 +1,9 @@
-// Arc diagram visualization.
-// All members on a horizontal baseline ordered by generation (oldest left).
-// Partner bonds arch above the line; parent-child bonds arch below.
-// Arc height scales with span, capped to keep the diagram compact.
-// Scroll horizontally for large families.
+// Arc diagram — vertical orientation.
+// Members placed on a centre vertical axis, sorted oldest generation (top) → youngest (bottom).
+// Parent-child relationships arc to the LEFT.
+// Partner relationships arc to the RIGHT.
+// Canvas width = viewport width (no horizontal scroll).
+// Canvas height scales with member count; users pan vertically.
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -26,14 +27,16 @@ class _ArcNode {
 class ArcLayout {
   List<_ArcNode> _nodes = [];
   double canvasWidth = 0;
+  double canvasHeight = 0;
 
-  static const _nodeSpacing = 72.0;
-  static const _paddingH = 52.0;
+  static const _nodeSpacing = 60.0; // vertical spacing between members
+  static const _paddingV = 48.0;
 
   void compute({
     required List<Member> members,
     required List<Relationship> rels,
     required String? egoId,
+    required double viewWidth,
     required double viewHeight,
   }) {
     _nodes = [];
@@ -42,21 +45,23 @@ class ArcLayout {
     final anchorId = egoId ?? members.first.id;
     final gens = GenLaneLayout.assignGenerations(anchorId, members, rels);
 
-    // Sort: oldest generation first, then group siblings (same parents) together
-    final sorted = List<Member>.from(members);
-    sorted.sort((a, b) {
-      final ga = gens[a.id] ?? 0;
-      final gb = gens[b.id] ?? 0;
-      if (ga != gb) return ga.compareTo(gb);
-      return a.id.compareTo(b.id); // stable secondary sort
-    });
+    // Sort: oldest generation (most negative) at top, ego in middle, children below.
+    // Within the same generation, sort partners adjacent to each other.
+    final sorted = _sortMembers(members, rels, gens);
 
-    canvasWidth = sorted.length * _nodeSpacing + _paddingH * 2;
-    final baseline = viewHeight * 0.52;
+    // Scale spacing so the full family fits in roughly one screen height.
+    // Floor at 40px so nodes don't collapse.
+    final naturalH = sorted.length * _nodeSpacing;
+    final scale = (viewHeight * 0.88 / naturalH).clamp(0.0, 1.0);
+    final spacing = math.max(40.0, _nodeSpacing * scale);
 
+    canvasWidth = viewWidth;
+    canvasHeight = sorted.length * spacing + _paddingV * 2;
+
+    final cx = viewWidth / 2;
     for (int i = 0; i < sorted.length; i++) {
-      final x = _paddingH + i * _nodeSpacing;
-      _nodes.add(_ArcNode(sorted[i].id, Offset(x, baseline)));
+      final y = _paddingV + i * spacing;
+      _nodes.add(_ArcNode(sorted[i].id, Offset(cx, y)));
     }
   }
 
@@ -65,6 +70,35 @@ class ArcLayout {
       if ((n.pos - pos).distance <= radius) return n.id;
     }
     return null;
+  }
+
+  // Sort members: by generation ascending (oldest ancestors first),
+  // then group partners adjacent to each other within the same generation.
+  static List<Member> _sortMembers(List<Member> members,
+      List<Relationship> rels, Map<String, int> gens) {
+    // Build partner pairs
+    final partnerOf = <String, String>{};
+    for (final rel in rels) {
+      if (rel.relType == RelType.partner) {
+        partnerOf[rel.sourceId] = rel.targetId;
+        partnerOf[rel.targetId] = rel.sourceId;
+      }
+    }
+
+    final sorted = List<Member>.from(members);
+    sorted.sort((a, b) {
+      final ga = gens[a.id] ?? 0;
+      final gb = gens[b.id] ?? 0;
+      if (ga != gb) return ga.compareTo(gb);
+      // Same generation: keep partners adjacent by putting the
+      // one with the lower-ID partner earlier.
+      final pa = partnerOf[a.id];
+      final pb = partnerOf[b.id];
+      if (pa == b.id) return -1; // a is partner of b → keep a first
+      if (pb == a.id) return 1;
+      return a.id.compareTo(b.id);
+    });
+    return sorted;
   }
 }
 
@@ -87,31 +121,29 @@ class ArcDiagramPainter extends CustomPainter {
   final Map<String, KinshipResult> kinshipMap;
   final String? egoId;
 
-  // Maximum arc height above / below the baseline (px)
-  static const _maxArcHeight = 96.0;
-
   @override
   void paint(Canvas canvas, Size size) {
     if (layout._nodes.isEmpty) return;
-    _drawBaseline(canvas, size);
-    _drawArcs(canvas);
-    _drawNodes(canvas);
+    _drawCentreLine(canvas, size);
+    _drawArcs(canvas, size);
+    _drawNodes(canvas, size);
   }
 
-  void _drawBaseline(Canvas canvas, Size size) {
-    if (layout._nodes.isEmpty) return;
-    final y = layout._nodes.first.pos.dy;
+  void _drawCentreLine(Canvas canvas, Size size) {
     canvas.drawLine(
-      Offset(0, y),
-      Offset(size.width, y),
+      Offset(size.width / 2, 0),
+      Offset(size.width / 2, size.height),
       Paint()
-        ..color = SilatColors.bg3.withOpacity(0.35)
+        ..color = SilatColors.bg3.withOpacity(0.25)
         ..strokeWidth = 0.5,
     );
   }
 
-  void _drawArcs(Canvas canvas) {
+  void _drawArcs(Canvas canvas, Size size) {
     final posById = {for (final n in layout._nodes) n.id: n.pos};
+    // Left zone: parent-child arcs; right zone: partner arcs.
+    final leftMax = size.width / 2 * 0.80;
+    final rightMax = size.width / 2 * 0.72;
 
     for (final rel in relationships) {
       final sp = posById[rel.sourceId];
@@ -121,25 +153,25 @@ class ArcDiagramPainter extends CustomPainter {
       final isPartner = rel.relType == RelType.partner;
       final paint = Paint()
         ..color = (isPartner ? SilatColors.slate : SilatColors.terracotta)
-            .withOpacity(isPartner ? 0.38 : 0.30)
+            .withOpacity(isPartner ? 0.38 : 0.28)
         ..strokeWidth = isPartner ? 1.0 : 1.1
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
 
-      final x1 = math.min(sp.dx, tp.dx);
-      final x2 = math.max(sp.dx, tp.dx);
-      final baseline = sp.dy; // all nodes share the same y
-      final span = x2 - x1;
-      // Arc height: half the span, capped to keep it readable
-      final arcH = math.min(span * 0.45, _maxArcHeight);
+      final y1 = math.min(sp.dy, tp.dy);
+      final y2 = math.max(sp.dy, tp.dy);
+      final cx = sp.dx; // all nodes share the same x (centre line)
 
-      // Partners arch above, parent-child arch below
-      final above = isPartner;
-      final cy = above ? baseline - arcH : baseline + arcH;
+      final span = y2 - y1;
+      // Arc bow proportional to span, capped
+      final bow = isPartner
+          ? math.min(span * 0.45, rightMax)
+          : math.min(span * 0.45, leftMax);
+      final sign = isPartner ? 1.0 : -1.0; // right vs left
 
       final path = Path()
-        ..moveTo(x1, baseline)
-        ..cubicTo(x1, cy, x2, cy, x2, baseline);
+        ..moveTo(cx, y1)
+        ..cubicTo(cx + sign * bow, y1, cx + sign * bow, y2, cx, y2);
 
       if (isPartner) {
         _drawDashedPath(canvas, path, paint);
@@ -149,7 +181,7 @@ class ArcDiagramPainter extends CustomPainter {
     }
   }
 
-  void _drawNodes(Canvas canvas) {
+  void _drawNodes(Canvas canvas, Size size) {
     final memberById = {for (final m in members) m.id: m};
 
     for (final node in layout._nodes) {
@@ -158,9 +190,10 @@ class ArcDiagramPainter extends CustomPainter {
 
       final isEgo = node.id == egoId;
       final color = isEgo ? SilatColors.gen0 : _genderColor(member.gender);
-      const r = 11.0;
+      final r = isEgo ? 14.0 : 11.0;
       final pos = node.pos;
 
+      // Node circle
       canvas.drawCircle(
           pos, r, Paint()..color = color.withOpacity(isEgo ? 0.22 : 0.12));
       canvas.drawCircle(
@@ -169,22 +202,26 @@ class ArcDiagramPainter extends CustomPainter {
           Paint()
             ..color = color
             ..style = PaintingStyle.stroke
-            ..strokeWidth = isEgo ? 2.0 : 1.0);
+            ..strokeWidth = isEgo ? 1.8 : 1.0);
 
+      // Initials inside circle
       _drawText(canvas, member.initials, pos,
-          fontSize: 7.5, color: color, bold: true);
+          fontSize: isEgo ? 8.5 : 7.0, color: color, bold: true);
 
-      // Kinship / "you" label sits above the baseline (above-arc space)
+      // Name to the right of the node (right side is partner-arc space,
+      // but name text is short and fits in the gap between node and arcs)
+      _drawText(canvas, member.displayName,
+          Offset(pos.dx + r + 6, pos.dy - 5),
+          fontSize: 9.5, color: SilatColors.fg1, alignLeft: true);
+
+      // Kinship label below name, same x
       final kLabel = isEgo ? 'you' : (kinshipMap[node.id]?.displayLabel ?? '');
       if (kLabel.isNotEmpty) {
-        _drawText(canvas, kLabel, Offset(pos.dx, pos.dy - r - 8),
-            fontSize: 7.5,
-            color: isEgo ? SilatColors.gen0 : SilatColors.fg3);
+        _drawText(canvas, kLabel, Offset(pos.dx + r + 6, pos.dy + 6),
+            fontSize: 8.0,
+            color: isEgo ? SilatColors.gen0 : SilatColors.fg3,
+            alignLeft: true);
       }
-
-      // Name label below — rotated −45° to pack horizontally
-      _drawRotatedLabel(canvas, member.displayName,
-          Offset(pos.dx, pos.dy + r + 4));
     }
   }
 
@@ -210,8 +247,11 @@ class ArcDiagramPainter extends CustomPainter {
     }
   }
 
-  void _drawText(Canvas canvas, String text, Offset center,
-      {required double fontSize, required Color color, bool bold = false}) {
+  void _drawText(Canvas canvas, String text, Offset origin,
+      {required double fontSize,
+      required Color color,
+      bool bold = false,
+      bool alignLeft = false}) {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
@@ -224,27 +264,8 @@ class ArcDiagramPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
-  }
-
-  void _drawRotatedLabel(Canvas canvas, String text, Offset anchor) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(
-          fontSize: 8.0,
-          color: SilatColors.fg2,
-          fontFamily: 'Inter',
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    canvas.save();
-    canvas.translate(anchor.dx, anchor.dy);
-    canvas.rotate(-math.pi / 4);
-    tp.paint(canvas, Offset.zero);
-    canvas.restore();
+    final dx = alignLeft ? 0.0 : tp.width / 2;
+    tp.paint(canvas, origin - Offset(dx, tp.height / 2));
   }
 
   @override
