@@ -37,10 +37,12 @@ extension KinshipLabelDisplay on KinshipLabel {
       KinshipLabel.grandparent => g == 'M' ? 'Grandfather' : g == 'F' ? 'Grandmother' : 'Grandparent',
       KinshipLabel.grandchild => g == 'M' ? 'Grandson' : g == 'F' ? 'Granddaughter' : 'Grandchild',
       KinshipLabel.greatGrandparent => g == 'M' ? 'Great-grandfather' : g == 'F' ? 'Great-grandmother' : 'Great-grandparent',
-      KinshipLabel.aunt => 'Aunt',
-      KinshipLabel.uncle => 'Uncle',
-      KinshipLabel.niece => 'Niece',
-      KinshipLabel.nephew => 'Nephew',
+      // aunt/uncle/niece/nephew: engine emits aunt/niece as structural labels;
+      // gender is resolved here from the alter's genderCode.
+      KinshipLabel.aunt => g == 'M' ? 'Uncle' : 'Aunt',
+      KinshipLabel.uncle => g == 'F' ? 'Aunt' : 'Uncle',
+      KinshipLabel.niece => g == 'M' ? 'Nephew' : 'Niece',
+      KinshipLabel.nephew => g == 'F' ? 'Niece' : 'Nephew',
       KinshipLabel.firstCousin => '1st Cousin',
       KinshipLabel.parentInLaw => g == 'M' ? 'Father-in-law' : g == 'F' ? 'Mother-in-law' : 'Parent-in-law',
       KinshipLabel.siblingInLaw => g == 'M' ? 'Brother-in-law' : g == 'F' ? 'Sister-in-law' : 'Sibling-in-law',
