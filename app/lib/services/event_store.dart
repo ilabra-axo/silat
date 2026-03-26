@@ -93,9 +93,9 @@ class EventStore {
   }) async {
     final fields = <String, dynamic>{
       if (firstName != null) 'first_name': firstName,
-      if (lastName != null) 'last_name': lastName,
-      if (birthDate != null) 'birth_date': birthDate.toIso8601String(),
-      if (deathDate != null) 'death_date': deathDate.toIso8601String(),
+      'last_name': lastName,
+      'birth_date': birthDate?.toIso8601String(),
+      'death_date': deathDate?.toIso8601String(),
       if (gender != null) 'gender': gender.code,
       'location_label': locationLabel,
       'latitude': latitude,

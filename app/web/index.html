@@ -33,6 +33,23 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <script>
+    // Force service worker update on every load so users always get fresh app code.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        regs.forEach(function(reg) {
+          reg.update();
+          if (reg.waiting) {
+            reg.waiting.postMessage({type: 'SKIP_WAITING'});
+          }
+        });
+      });
+      // Reload once when a new SW takes control
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        window.location.reload();
+      });
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
