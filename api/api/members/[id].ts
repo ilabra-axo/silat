@@ -53,10 +53,10 @@ export default async function handler(
         is_urgent            = COALESCE(${b.is_urgent as boolean ?? null}, is_urgent),
         claim_state          = COALESCE(${b.claim_state as string ?? null}, claim_state),
         owner_user_id        = COALESCE(${b.owner_user_id as string ?? null}, owner_user_id),
-        claim_token          = ${(b.claim_token as string) ?? null},
+        claim_token          = COALESCE(${b.claim_token as string ?? null}, claim_token),
         stewardship_state    = COALESCE(${b.stewardship_state as string ?? null}, stewardship_state),
         steward_user_id      = ${(b.steward_user_id as string) ?? null},
-        steward_claim_token  = ${(b.steward_claim_token as string) ?? null},
+        steward_claim_token  = COALESCE(${b.steward_claim_token as string ?? null}, steward_claim_token),
         updated_at           = ${now}
       WHERE id = ${id}
     `;

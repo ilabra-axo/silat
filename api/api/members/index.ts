@@ -84,26 +84,7 @@ export default async function handler(
         ${now},
         ${tree_id}
       )
-      ON CONFLICT (id) DO UPDATE SET
-        first_name           = EXCLUDED.first_name,
-        last_name            = EXCLUDED.last_name,
-        birth_date           = EXCLUDED.birth_date,
-        death_date           = EXCLUDED.death_date,
-        gender               = EXCLUDED.gender,
-        location_label       = EXCLUDED.location_label,
-        latitude             = EXCLUDED.latitude,
-        longitude            = EXCLUDED.longitude,
-        residence_h3         = EXCLUDED.residence_h3,
-        birth_location_label = EXCLUDED.birth_location_label,
-        birth_latitude       = EXCLUDED.birth_latitude,
-        birth_longitude      = EXCLUDED.birth_longitude,
-        birth_h3             = EXCLUDED.birth_h3,
-        notes                = EXCLUDED.notes,
-        photo_url            = EXCLUDED.photo_url,
-        phone                = EXCLUDED.phone,
-        whatsapp             = EXCLUDED.whatsapp,
-        is_urgent            = EXCLUDED.is_urgent,
-        updated_at           = ${now}
+      ON CONFLICT (id) DO NOTHING
     `;
 
     const { rows } = await sql`SELECT * FROM members WHERE id = ${id}`;
